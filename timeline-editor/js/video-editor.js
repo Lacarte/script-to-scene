@@ -40,7 +40,10 @@ function getScenesDuration() {
  */
 function getTotalDuration() {
     const scenesDuration = getScenesDuration();
-    const audioDuration = EditorState.audio?.loaded ? EditorState.audio.duration : 0;
+    // Use trimmed duration if set, otherwise use full audio duration
+    const audioDuration = EditorState.audio?.loaded
+        ? (EditorState.audio.trimmedDuration || EditorState.audio.duration)
+        : 0;
     return Math.max(scenesDuration, audioDuration);
 }
 
@@ -445,8 +448,9 @@ function renderAudioTrack() {
     if (!elements.audioTrack) return;
 
     if (EditorState.audio && EditorState.audio.file) {
-        // Use actual audio duration if loaded, otherwise use project duration
-        const audioDuration = EditorState.audio.loaded ? EditorState.audio.duration : EditorState.project.totalDuration;
+        // Use trimmed duration if set, otherwise use actual audio duration
+        const audioDuration = EditorState.audio.trimmedDuration ||
+            (EditorState.audio.loaded ? EditorState.audio.duration : EditorState.project.totalDuration);
         const totalWidth = timeToPixels(audioDuration);
 
         // Show error state if audio failed to load
@@ -462,13 +466,90 @@ function renderAudioTrack() {
                 </svg>
                 <span class="audio-clip-name">${EditorState.audio.file}</span>
                 <span class="audio-clip-duration">${statusText}</span>
+                <div class="resize-handle resize-handle-right audio-resize-handle"></div>
             </div>
         `;
+
+        // Setup audio resize handler
+        setupAudioResizeHandler();
     } else {
         elements.audioTrack.innerHTML = `
             <div class="audio-placeholder">Click + to add background audio</div>
         `;
     }
+}
+
+/**
+ * Setup resize handler for audio clip
+ */
+function setupAudioResizeHandler() {
+    const audioClip = elements.audioTrack?.querySelector('.audio-clip');
+    const resizeHandle = audioClip?.querySelector('.audio-resize-handle');
+
+    if (!resizeHandle || !EditorState.audio?.loaded) return;
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        startAudioResize(e);
+    });
+}
+
+/**
+ * Start resizing the audio clip
+ */
+function startAudioResize(startEvent) {
+    if (!EditorState.audio?.loaded) return;
+
+    const startX = startEvent.clientX;
+    const startDuration = EditorState.audio.trimmedDuration || EditorState.audio.duration;
+    const maxDuration = EditorState.audio.duration; // Can't extend beyond original audio length
+
+    const audioClip = elements.audioTrack?.querySelector('.audio-clip');
+    const durationSpan = audioClip?.querySelector('.audio-clip-duration');
+
+    const onMouseMove = (e) => {
+        const deltaX = e.clientX - startX;
+        const deltaDuration = pixelsToTime(deltaX);
+
+        // Calculate new duration (min 1s, max original audio duration)
+        let newDuration = Math.max(1, Math.min(maxDuration, startDuration + deltaDuration));
+
+        // Snap to 0.5s increments
+        newDuration = Math.round(newDuration * 2) / 2;
+
+        // Update audio trimmed duration
+        EditorState.audio.trimmedDuration = newDuration;
+
+        // Update clip width visually
+        if (audioClip) {
+            const newWidth = timeToPixels(newDuration);
+            audioClip.style.width = `${newWidth}px`;
+        }
+
+        // Update duration display
+        if (durationSpan) {
+            durationSpan.textContent = formatTimestamp(newDuration);
+        }
+    };
+
+    const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+
+        // Recalculate total duration
+        recalculateDuration();
+        renderTimeRuler();
+
+        // Update preview duration
+        if (EditorState.preview) {
+            EditorState.preview.setDuration(getTotalDuration());
+        }
+
+        showToast(`Audio duration: ${formatTimestamp(EditorState.audio.trimmedDuration || EditorState.audio.duration)}`, 'info');
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
 }
 
 /**

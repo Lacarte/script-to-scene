@@ -410,6 +410,7 @@
 
 /* Audio Clip */
 .audio-clip {
+    position: relative;
     flex-shrink: 0;
     height: 32px;
     background: linear-gradient(135deg, var(--accent-secondary) 0%, rgba(224, 64, 251, 0.3) 100%);
@@ -418,9 +419,32 @@
     display: flex;
     align-items: center;
     padding: 0 12px;
+    padding-right: 20px;
     gap: 8px;
     box-sizing: border-box;
     /* Include border in width calculation */
+}
+
+/* Audio Resize Handle */
+.audio-resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 8px;
+    height: 100%;
+    background: rgba(224, 64, 251, 0.5);
+    cursor: ew-resize;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.audio-clip:hover .audio-resize-handle {
+    opacity: 1;
+}
+
+.audio-resize-handle:hover {
+    background: var(--accent-secondary);
 }
 
 .audio-clip.audio-clip-error {
