@@ -5,7 +5,7 @@
 
 import { SCENE_COLORS, formatTimestamp, showToast } from './utils.js';
 import { CanvasPreview } from './preview.js';
-import { prepareExportData } from './export-api.js';
+import { prepareExportData, validateExportData } from './export-api.js';
 
 // Editor State
 const EditorState = {
@@ -268,6 +268,10 @@ function loadProject(data) {
                 updatePlayButton();
             }
         });
+
+        // Set project path for loading text backgrounds (wbg.png, bbg.png)
+        EditorState.preview.setProjectPath(`working-assets/${EditorState.project.id}`);
+
         EditorState.preview.setScenes(EditorState.scenes);
         // Initial render to show placeholder/scene
         EditorState.preview.render();
@@ -1329,7 +1333,7 @@ async function matchMediaToScenes() {
 }
 
 /**
- * Export - Show JSON modal
+ * Export - Show JSON modal with validation
  */
 function exportMp4() {
     // Prepare audio config if audio is loaded
@@ -1337,6 +1341,7 @@ function exportMp4() {
         file: EditorState.audio.file,
         path: EditorState.audio.path,
         duration: EditorState.audio.duration,
+        trimmedDuration: EditorState.audio.trimmedDuration,
         volume: 1.0,
         start_offset: 0
     } : null;
@@ -1348,6 +1353,20 @@ function exportMp4() {
         '',
         audioConfig
     );
+
+    // Validate export data
+    const validation = validateExportData(exportData);
+
+    // Show validation warnings/errors
+    if (!validation.valid) {
+        showToast(`Export errors: ${validation.errors.join(', ')}`, 'error');
+        return;
+    }
+
+    if (validation.warnings.length > 0) {
+        console.warn('Export warnings:', validation.warnings);
+        showToast(`Warning: ${validation.warnings[0]}`, 'warning');
+    }
 
     // Show modal with JSON
     const modal = document.getElementById('export-modal');

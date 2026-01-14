@@ -161,19 +161,59 @@ export class ExportAPI {
 }
 
 /**
- * Prepare export data from editor state
+ * Prepare comprehensive export data for Python backend
+ * This includes all information needed to render the final video with FFmpeg
  */
 export function prepareExportData(project, scenes, mediaFolder, audioConfig = null) {
+    // Calculate total scenes duration
+    const scenesDuration = scenes.reduce((sum, s) => sum + s.duration, 0);
+
+    // Determine total video duration (max of scenes and trimmed audio)
+    const audioDuration = audioConfig?.trimmedDuration || audioConfig?.duration || 0;
+    const totalDuration = Math.max(scenesDuration, audioDuration);
+
     return {
+        // Project identification
         project_id: project.id,
-        media_folder: mediaFolder,
+        project_name: project.name,
+
+        // Media paths - backend will resolve files from here
+        media_base_path: `working-assets/${project.id}`,
+
+        // Output video settings
         output: {
-            resolution: [1080, 1920],
+            resolution: {
+                width: 1080,
+                height: 1920
+            },
             fps: 30,
-            codec: 'h264',
-            quality: 'high'
+            codec: 'libx264',
+            pixel_format: 'yuv420p',
+            preset: 'medium',  // FFmpeg preset: ultrafast, fast, medium, slow
+            crf: 23,           // Quality: 0-51, lower = better quality
+            format: 'mp4'
         },
-        audio: audioConfig,
+
+        // Audio configuration
+        audio: audioConfig ? {
+            file: audioConfig.file,
+            path: audioConfig.path,
+            original_duration: audioConfig.duration,
+            trimmed_duration: audioConfig.trimmedDuration || audioConfig.duration,
+            volume: audioConfig.volume || 1.0,
+            start_offset: audioConfig.start_offset || 0,
+            fade_out: 0.5  // Fade out audio at end
+        } : null,
+
+        // Timeline metadata
+        timeline: {
+            total_duration: totalDuration,
+            scenes_duration: scenesDuration,
+            scene_count: scenes.length,
+            created_at: new Date().toISOString()
+        },
+
+        // Scene-by-scene export data
         scenes: scenes.map((scene, index) => {
             // Calculate start time based on previous scenes
             let startTime = 0;
@@ -181,20 +221,61 @@ export function prepareExportData(project, scenes, mediaFolder, audioConfig = nu
                 startTime += scenes[i].duration;
             }
 
+            const mediaType = getMediaType(scene);
+            const isTextScene = mediaType === 'text';
+
             return {
+                // Scene identification
                 id: scene.id,
-                media_file: scene.image || `scene_${scene.id}.jpg`,
-                media_type: getMediaType(scene),
+                index: index,
+                type: scene.type,
+
+                // Timing
                 start_time: startTime,
                 duration: scene.duration,
-                effect: {
-                    type: scene.visual_fx || 'static',
-                    start_scale: 1.0,
-                    end_scale: scene.visual_fx === 'zoom_in' ? 1.2 : (scene.visual_fx === 'zoom_out' ? 0.8 : 1.0)
+                end_time: startTime + scene.duration,
+
+                // Media source
+                media: {
+                    type: mediaType,
+                    // For image scenes: filename in working-assets/{project_id}/
+                    file: isTextScene ? null : (scene.image || `${index + 1}.jpg`),
+                    // Full path for backend to use
+                    path: isTextScene ? null : `working-assets/${project.id}/${scene.image || `${index + 1}.jpg`}`
                 },
-                transition_out: {
-                    type: 'crossfade',
-                    duration: 0.3
+
+                // Text content (for text-type scenes)
+                text: isTextScene ? {
+                    content: scene.script || '',
+                    font: 'Inter',
+                    font_size: 48,
+                    font_weight: 'bold',
+                    // Text color: 'white' or 'black' (determines background)
+                    color: scene.text_color || 'white',
+                    color_hex: (scene.text_color || 'white') === 'white' ? '#ffffff' : '#000000',
+                    // Background options
+                    background: {
+                        // Use image background if available
+                        // wbg.png = background for white text (dark/image bg)
+                        // bbg.png = background for black text (light/image bg)
+                        image: (scene.text_color || 'white') === 'white' ? 'wbg.png' : 'bbg.png',
+                        image_path: `working-assets/${project.id}/${(scene.text_color || 'white') === 'white' ? 'wbg.png' : 'bbg.png'}`,
+                        // Fallback solid color if no image
+                        fallback_color: (scene.text_color || 'white') === 'white' ? '#000000' : '#ffffff'
+                    },
+                    alignment: 'center',
+                    padding: 80,
+                    fade_in: 0.25,   // Fade in during first 25% of duration
+                    fade_out: 0.25  // Fade out during last 25% of duration
+                } : null,
+
+                // Visual effect
+                effect: getEffectConfig(scene.visual_fx || 'static'),
+
+                // Transition to next scene
+                transition: {
+                    type: index < scenes.length - 1 ? 'crossfade' : 'none',
+                    duration: index < scenes.length - 1 ? 0.3 : 0
                 }
             };
         })
@@ -202,17 +283,135 @@ export function prepareExportData(project, scenes, mediaFolder, audioConfig = nu
 }
 
 /**
+ * Get detailed effect configuration for FFmpeg
+ */
+function getEffectConfig(effectType) {
+    const effects = {
+        'static': {
+            type: 'static',
+            description: 'No animation'
+        },
+        'zoom_in': {
+            type: 'zoom_in',
+            description: 'Ken Burns zoom in effect',
+            start_scale: 1.0,
+            end_scale: 1.2,
+            anchor: 'center',  // center, top, bottom, left, right
+            easing: 'ease_in_out'
+        },
+        'zoom_out': {
+            type: 'zoom_out',
+            description: 'Ken Burns zoom out effect',
+            start_scale: 1.2,
+            end_scale: 1.0,
+            anchor: 'center',
+            easing: 'ease_in_out'
+        },
+        'pan_left': {
+            type: 'pan_left',
+            description: 'Horizontal pan from right to left',
+            pan_amount: 0.2,  // 20% of image width
+            easing: 'linear'
+        },
+        'pan_right': {
+            type: 'pan_right',
+            description: 'Horizontal pan from left to right',
+            pan_amount: 0.2,
+            easing: 'linear'
+        },
+        'pan_up': {
+            type: 'pan_up',
+            description: 'Vertical pan from bottom to top',
+            pan_amount: 0.2,
+            easing: 'linear'
+        },
+        'pan_down': {
+            type: 'pan_down',
+            description: 'Vertical pan from top to bottom',
+            pan_amount: 0.2,
+            easing: 'linear'
+        },
+        'fade': {
+            type: 'fade',
+            description: 'Fade in from black',
+            fade_duration: 0.5
+        },
+        'shake': {
+            type: 'shake',
+            description: 'Camera shake effect',
+            intensity: 5,      // Pixels of movement
+            frequency: 20      // Shakes per second
+        }
+    };
+
+    return effects[effectType] || effects['static'];
+}
+
+/**
  * Get media type for a scene
  */
 function getMediaType(scene) {
+    // Text scenes don't have media files
     if (scene.type === 'text' || scene.type === 'cta') {
         return 'text';
     }
+
+    // Check file extension if image is specified
     if (scene.image) {
         const ext = scene.image.split('.').pop().toLowerCase();
         if (['mp4', 'webm', 'mov', 'avi'].includes(ext)) {
             return 'video';
         }
     }
+
     return 'image';
+}
+
+/**
+ * Validate export data before sending to backend
+ */
+export function validateExportData(exportData) {
+    const errors = [];
+    const warnings = [];
+
+    // Check project ID
+    if (!exportData.project_id) {
+        errors.push('Missing project ID');
+    }
+
+    // Check scenes
+    if (!exportData.scenes || exportData.scenes.length === 0) {
+        errors.push('No scenes to export');
+    }
+
+    // Validate each scene
+    exportData.scenes?.forEach((scene, index) => {
+        if (scene.duration <= 0) {
+            errors.push(`Scene ${index + 1}: Invalid duration (${scene.duration}s)`);
+        }
+
+        if (scene.media.type === 'image' && !scene.media.file) {
+            warnings.push(`Scene ${index + 1}: No media file specified`);
+        }
+
+        if (scene.media.type === 'text' && !scene.text?.content) {
+            warnings.push(`Scene ${index + 1}: Text scene has no content`);
+        }
+    });
+
+    // Check audio
+    if (exportData.audio && !exportData.audio.path) {
+        warnings.push('Audio specified but no file path');
+    }
+
+    // Check total duration
+    if (exportData.timeline.total_duration <= 0) {
+        errors.push('Total duration must be greater than 0');
+    }
+
+    return {
+        valid: errors.length === 0,
+        errors,
+        warnings
+    };
 }

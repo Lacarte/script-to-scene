@@ -22,8 +22,64 @@ export class CanvasPreview {
         // Image cache
         this.imageCache = new Map();
 
+        // Text background images cache (wbg.png = white text bg, bbg.png = black text bg)
+        this.textBackgrounds = {
+            white: null,  // Background for white text (dark bg image)
+            black: null   // Background for black text (light bg image)
+        };
+
+        // Project base path for loading assets
+        this.projectBasePath = '';
+
         // Background color
         this.backgroundColor = '#000000';
+    }
+
+    /**
+     * Set project base path for loading text backgrounds
+     */
+    setProjectPath(basePath) {
+        this.projectBasePath = basePath;
+        this.loadTextBackgrounds();
+    }
+
+    /**
+     * Load text background images from working-assets/{project_id}/
+     * wbg.png = background for white text (typically dark)
+     * bbg.png = background for black text (typically light)
+     */
+    async loadTextBackgrounds() {
+        if (!this.projectBasePath) return;
+
+        // Load white text background (wbg.png)
+        const wbgPath = `${this.projectBasePath}/wbg.png`;
+        try {
+            const wbgImg = new Image();
+            await new Promise((resolve, reject) => {
+                wbgImg.onload = resolve;
+                wbgImg.onerror = reject;
+                wbgImg.src = wbgPath;
+            });
+            this.textBackgrounds.white = wbgImg;
+            console.log('Loaded white text background:', wbgPath);
+        } catch (e) {
+            console.log('No white text background found at:', wbgPath);
+        }
+
+        // Load black text background (bbg.png)
+        const bbgPath = `${this.projectBasePath}/bbg.png`;
+        try {
+            const bbgImg = new Image();
+            await new Promise((resolve, reject) => {
+                bbgImg.onload = resolve;
+                bbgImg.onerror = reject;
+                bbgImg.src = bbgPath;
+            });
+            this.textBackgrounds.black = bbgImg;
+            console.log('Loaded black text background:', bbgPath);
+        } catch (e) {
+            console.log('No black text background found at:', bbgPath);
+        }
     }
 
     /**
@@ -187,22 +243,82 @@ export class CanvasPreview {
         const { scene, progress } = current;
         const img = this.imageCache.get(scene.id);
 
+        // For text scenes, render background + text overlay
+        if (scene.type === 'text') {
+            this.renderTextScene(scene, progress);
+            return;
+        }
+
+        // For image/video scenes, render media with effects
         if (img) {
             this.renderImage(img, scene.visual_fx || 'static', progress);
         } else {
             this.renderPlaceholder(scene);
         }
+    }
 
-        // Render text overlay for text-type scenes
-        if (scene.type === 'text' && scene.script) {
-            this.renderTextOverlay(scene.script, progress);
+    /**
+     * Render a text scene with optional background image
+     * Uses wbg.png for white text, bbg.png for black text
+     */
+    renderTextScene(scene, progress) {
+        // Determine text color preference (default: white text on dark background)
+        const textColor = scene.text_color || 'white';
+        const bgImage = textColor === 'white' ? this.textBackgrounds.white : this.textBackgrounds.black;
+
+        // Apply fade effect based on progress
+        const fadeIn = Math.min(1, progress * 4);  // Fade in during first 25%
+        const fadeOut = Math.min(1, (1 - progress) * 4);  // Fade out during last 25%
+        const alpha = Math.min(fadeIn, fadeOut);
+
+        this.ctx.save();
+        this.ctx.globalAlpha = alpha;
+
+        // Render background image if available, otherwise solid color
+        if (bgImage) {
+            this.renderBackgroundImage(bgImage);
+        } else {
+            // Fallback to solid background
+            this.ctx.fillStyle = textColor === 'white' ? '#000000' : '#ffffff';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+        }
+
+        this.ctx.restore();
+
+        // Render text on top (with its own fade)
+        if (scene.script) {
+            this.renderTextOverlay(scene.script, progress, textColor);
         }
     }
 
     /**
-     * Render text overlay - white text centered on screen
+     * Render background image (cover fit)
      */
-    renderTextOverlay(text, progress) {
+    renderBackgroundImage(img) {
+        const imgAspect = img.width / img.height;
+        const canvasAspect = this.width / this.height;
+
+        let drawWidth, drawHeight, offsetX, offsetY;
+
+        if (imgAspect > canvasAspect) {
+            drawHeight = this.height;
+            drawWidth = drawHeight * imgAspect;
+            offsetX = (this.width - drawWidth) / 2;
+            offsetY = 0;
+        } else {
+            drawWidth = this.width;
+            drawHeight = drawWidth / imgAspect;
+            offsetX = 0;
+            offsetY = (this.height - drawHeight) / 2;
+        }
+
+        this.ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+    }
+
+    /**
+     * Render text overlay - centered on screen with specified color
+     */
+    renderTextOverlay(text, progress, textColor = 'white') {
         this.ctx.save();
 
         // Apply fade effect based on progress
@@ -210,8 +326,8 @@ export class CanvasPreview {
         const fadeOut = Math.min(1, (1 - progress) * 4); // Fade out during last 25%
         this.ctx.globalAlpha = Math.min(fadeIn, fadeOut);
 
-        // Text styling
-        this.ctx.fillStyle = '#ffffff';
+        // Text styling based on color preference
+        this.ctx.fillStyle = textColor === 'white' ? '#ffffff' : '#000000';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
 
