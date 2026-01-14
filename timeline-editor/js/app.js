@@ -2,7 +2,7 @@ import { State } from './state.js';
 import { API } from './api.js';
 import { Timeline } from './timeline.js';
 import { Editor } from './editor.js';
-import { validateProject } from './validation.js';
+import { validateProject, hasBlockingErrors } from './validation.js';
 import { formatRelativeTime, showToast, Storage, getTotalDuration } from './utils.js';
 
 class App {
@@ -22,6 +22,7 @@ class App {
         this.timeline.onSceneClick = (scene) => {
             State.selectScene(scene);
             this.timeline.scrollToScene(scene.scene_id);
+            this.expandDetailsPanel();
         };
 
         // Subscribe to state changes for UI updates
@@ -32,13 +33,26 @@ class App {
         // Set up sidebar toggle
         this.setupSidebarToggle();
 
+        // Set up details panel toggle
+        this.setupDetailsToggle();
+
         // Set up keyboard shortcuts
         this.setupKeyboardShortcuts();
+
+        // Set up export button
+        this.setupExportButton();
 
         // Load projects
         await this.loadProjects();
 
         console.log('App initialized');
+    }
+
+    setupExportButton() {
+        const exportBtn = document.getElementById('export-timeline');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => this.exportTimeline());
+        }
     }
 
     setupSidebarToggle() {
@@ -60,6 +74,35 @@ class App {
             layout.dataset.sidebar = isCollapsed ? 'expanded' : 'collapsed';
             Storage.save('timeline_sidebar_collapsed', !isCollapsed);
         });
+    }
+
+    setupDetailsToggle() {
+        const toggle = document.getElementById('details-toggle');
+        const layout = document.querySelector('.app-layout');
+
+        if (!toggle || !layout) return;
+
+        // Load saved state (default to expanded)
+        const savedState = Storage.load('timeline_details_collapsed');
+        if (savedState === true) {
+            layout.dataset.details = 'collapsed';
+        } else {
+            layout.dataset.details = 'expanded';
+        }
+
+        toggle.addEventListener('click', () => {
+            const isCollapsed = layout.dataset.details === 'collapsed';
+            layout.dataset.details = isCollapsed ? 'expanded' : 'collapsed';
+            Storage.save('timeline_details_collapsed', !isCollapsed);
+        });
+    }
+
+    expandDetailsPanel() {
+        const layout = document.querySelector('.app-layout');
+        if (layout && layout.dataset.details === 'collapsed') {
+            layout.dataset.details = 'expanded';
+            Storage.save('timeline_details_collapsed', false);
+        }
     }
 
     async loadProjects() {
@@ -298,8 +341,37 @@ class App {
                         }
                     }
                     break;
+
+                case '?':
+                    e.preventDefault();
+                    this.showShortcutsModal();
+                    break;
             }
         });
+    }
+
+    showShortcutsModal() {
+        const modal = document.getElementById('shortcuts-modal');
+        const closeBtn = modal?.querySelector('.modal-close');
+
+        if (!modal) return;
+
+        modal.classList.add('show');
+
+        const closeModal = () => modal.classList.remove('show');
+
+        closeBtn.onclick = closeModal;
+        modal.onclick = (e) => {
+            if (e.target === modal) closeModal();
+        };
+
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
     }
 
     async saveAll() {
@@ -373,6 +445,79 @@ class App {
         URL.revokeObjectURL(url);
 
         showToast('Project exported', 'success');
+    }
+
+    async exportTimeline() {
+        const project = State.get('currentProject');
+        const scenes = State.get('scenes');
+
+        if (!project || !scenes.length) {
+            showToast('No project or scenes to export', 'warning');
+            return;
+        }
+
+        const errors = State.get('validationErrors');
+        if (hasBlockingErrors(errors)) {
+            showToast('Cannot export: fix validation errors first', 'error');
+            return;
+        }
+
+        // Show loading state
+        const exportBtn = document.getElementById('export-timeline');
+        const timelineArea = document.querySelector('.timeline-area');
+
+        exportBtn?.classList.add('btn-loading');
+        timelineArea?.classList.add('exporting');
+
+        // Simulate processing delay for visual feedback
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        let imageCounter = 1;
+        const timeline = {
+            project_id: project.project_id,
+            total_duration: getTotalDuration(scenes),
+            scene_count: scenes.length,
+            exported_at: new Date().toISOString(),
+            scenes: scenes.map(scene => {
+                const isVisualScene = !['text', 'cta'].includes(scene.scene_type);
+                const imageFile = isVisualScene ? `image${imageCounter++}.jpg` : null;
+
+                return {
+                    id: scene.scene_id,
+                    type: scene.scene_type,
+                    timestamp: scene.timestamp,
+                    duration: scene.duration,
+                    description: scene.description || '',
+                    visual_fx: scene.visual_fx,
+                    style: scene.style || '',
+                    status: scene.status,
+                    // Visual scenes get image filename
+                    ...(isVisualScene && {
+                        image: imageFile,
+                        prompt: scene.prompt || ''
+                    }),
+                    // Text/CTA scenes get text content
+                    ...(!isVisualScene && {
+                        text_content: scene.text_content || '',
+                        text_bg: scene.text_bg || ''
+                    })
+                };
+            })
+        };
+
+        const blob = new Blob([JSON.stringify(timeline, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `timeline_${project.project_id.slice(0, 20)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        // Remove loading state
+        exportBtn?.classList.remove('btn-loading');
+        timelineArea?.classList.remove('exporting');
+
+        showToast(`Timeline exported with ${imageCounter - 1} images`, 'success');
     }
 
     restoreFromBackup() {

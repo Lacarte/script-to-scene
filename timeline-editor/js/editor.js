@@ -8,6 +8,7 @@ class SceneEditor {
         this.editorContainer = document.getElementById(editorContainerId);
         this.validationContainer = document.getElementById(validationContainerId);
         this.currentScene = null;
+        this.isEditorCollapsed = false;
 
         // Debounced save
         this.debouncedSave = debounce((scene) => this.saveScene(scene), 500);
@@ -22,9 +23,19 @@ class SceneEditor {
 
         if (!scene) {
             this.editorContainer.innerHTML = `
-                <h3>Scene Details</h3>
-                <div class="placeholder-text">Select a scene to edit</div>
+                <h3>
+                    Scene Details
+                    <button class="panel-toggle ${this.isEditorCollapsed ? 'collapsed' : ''}" id="editor-toggle" title="Toggle panel">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                    </button>
+                </h3>
+                <div class="panel-content ${this.isEditorCollapsed ? 'collapsed' : ''}">
+                    <div class="placeholder-text">Select a scene to edit</div>
+                </div>
             `;
+            this.attachToggleListener();
             return;
         }
 
@@ -36,8 +47,14 @@ class SceneEditor {
             <h3>
                 <span class="scene-badge" style="background: ${color};">${scene.scene_id}</span>
                 Scene Details
+                <button class="panel-toggle ${this.isEditorCollapsed ? 'collapsed' : ''}" id="editor-toggle" title="Toggle panel">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                </button>
             </h3>
 
+            <div class="panel-content ${this.isEditorCollapsed ? 'collapsed' : ''}">
             <div class="editor-form">
                 <div class="form-group">
                     <label>Scene Type</label>
@@ -126,16 +143,29 @@ class SceneEditor {
                 `}
 
                 <div class="form-actions">
-                    <button type="button" id="delete-scene" class="btn btn-danger">Delete Scene</button>
+                    <button type="button" id="duplicate-scene" class="btn btn-secondary">Duplicate</button>
+                    <button type="button" id="delete-scene" class="btn btn-danger">Delete</button>
                 </div>
+            </div>
             </div>
         `;
 
         this.attachEventListeners();
+        this.attachToggleListener();
     }
 
     hasFieldError(errors, field) {
         return errors.some(e => e.field === field && e.type === ErrorType.ERROR);
+    }
+
+    attachToggleListener() {
+        const toggleBtn = document.getElementById('editor-toggle');
+        toggleBtn?.addEventListener('click', () => {
+            this.isEditorCollapsed = !this.isEditorCollapsed;
+            toggleBtn.classList.toggle('collapsed', this.isEditorCollapsed);
+            const content = this.editorContainer.querySelector('.panel-content');
+            content?.classList.toggle('collapsed', this.isEditorCollapsed);
+        });
     }
 
     attachEventListeners() {
@@ -207,6 +237,11 @@ class SceneEditor {
             this.handleFieldChange('image_url', e.target.value);
         });
 
+        // Duplicate scene
+        document.getElementById('duplicate-scene')?.addEventListener('click', () => {
+            this.duplicateScene();
+        });
+
         // Delete scene
         document.getElementById('delete-scene')?.addEventListener('click', () => {
             this.deleteScene();
@@ -230,11 +265,68 @@ class SceneEditor {
     }
 
     async saveScene(scene) {
+        // Show saving indicator
+        this.showSaveIndicator('saving');
         try {
             await API.saveScene(scene, scene.scene_id + 1); // +1 for header row
+            this.showSaveIndicator('saved');
         } catch (error) {
             console.error('Failed to save scene:', error);
+            this.showSaveIndicator('error');
         }
+    }
+
+    showSaveIndicator(status) {
+        let indicator = document.getElementById('save-indicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'save-indicator';
+            indicator.className = 'save-indicator';
+            this.editorContainer.insertBefore(indicator, this.editorContainer.firstChild);
+        }
+
+        indicator.className = `save-indicator save-${status}`;
+
+        switch (status) {
+            case 'saving':
+                indicator.innerHTML = '<span class="save-spinner"></span> Saving...';
+                break;
+            case 'saved':
+                indicator.innerHTML = '✓ Saved';
+                setTimeout(() => indicator.classList.add('fade-out'), 1500);
+                break;
+            case 'error':
+                indicator.innerHTML = '✗ Save failed';
+                break;
+        }
+    }
+
+    duplicateScene() {
+        if (!this.currentScene) return;
+
+        const scenes = State.get('scenes');
+        const currentIndex = scenes.findIndex(s => s.scene_id === this.currentScene.scene_id);
+
+        // Create new scene with incremented ID
+        const maxId = Math.max(...scenes.map(s => s.scene_id));
+        const newScene = {
+            ...this.currentScene,
+            scene_id: maxId + 1,
+            status: 'pending',
+            image_url: '',
+            created_at: new Date().toISOString()
+        };
+
+        // Insert after current scene
+        const newScenes = [
+            ...scenes.slice(0, currentIndex + 1),
+            newScene,
+            ...scenes.slice(currentIndex + 1)
+        ];
+
+        State.setScenes(newScenes);
+        State.selectScene(newScene);
+        showToast(`Duplicated scene ${this.currentScene.scene_id} → ${newScene.scene_id}`, 'success');
     }
 
     async deleteScene() {
@@ -308,6 +400,10 @@ class SceneEditor {
     }
 
     isFixableError(error) {
+        // Use the fixable flag from validation if present
+        if (error.fixable) return true;
+
+        // Fallback checks for backwards compatibility
         // Duration mismatch (project vs total scenes)
         if (error.field === 'duration' && error.sceneId === null && error.message.includes("doesn't match project")) {
             return true;

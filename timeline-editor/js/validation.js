@@ -16,7 +16,8 @@ export function validateScene(scene) {
             type: ErrorType.ERROR,
             sceneId: scene.scene_id,
             field: 'duration',
-            message: `Scene ${scene.scene_id}: Duration must be a positive number`
+            message: `Scene ${scene.scene_id}: Duration must be a positive number`,
+            suggestion: 'Set a duration value greater than 0 seconds'
         });
     }
 
@@ -26,7 +27,8 @@ export function validateScene(scene) {
             type: ErrorType.ERROR,
             sceneId: scene.scene_id,
             field: 'text_content',
-            message: `Scene ${scene.scene_id}: Text/CTA scenes require text content`
+            message: `Scene ${scene.scene_id}: Text/CTA scenes require text content`,
+            suggestion: 'Add text in the "Text Content" field or change scene type'
         });
     }
 
@@ -37,7 +39,8 @@ export function validateScene(scene) {
             type: ErrorType.WARNING,
             sceneId: scene.scene_id,
             field: 'prompt',
-            message: `Scene ${scene.scene_id}: Missing prompt for visual scene`
+            message: `Scene ${scene.scene_id}: Missing prompt for visual scene`,
+            suggestion: 'Add an image generation prompt describing the visual'
         });
     }
 
@@ -47,7 +50,9 @@ export function validateScene(scene) {
             type: ErrorType.ERROR,
             sceneId: scene.scene_id,
             field: 'visual_fx',
-            message: `Scene ${scene.scene_id}: Invalid visual effect "${scene.visual_fx}"`
+            message: `Scene ${scene.scene_id}: Invalid visual effect "${scene.visual_fx}"`,
+            suggestion: `Use one of: ${ALLOWED_VFX.join(', ')}`,
+            fixable: true
         });
     }
 
@@ -79,7 +84,8 @@ export function validateProject(scenes, projectDuration = null) {
             type: ErrorType.ERROR,
             sceneId: null,
             field: 'scene_id',
-            message: 'Duplicate scene IDs detected'
+            message: 'Duplicate scene IDs detected',
+            suggestion: 'Delete duplicate scenes or renumber them manually'
         });
     }
 
@@ -88,7 +94,8 @@ export function validateProject(scenes, projectDuration = null) {
             type: ErrorType.ERROR,
             sceneId: null,
             field: 'scene_id',
-            message: 'Scene IDs are not sequential (expected 1, 2, 3...)'
+            message: 'Scene IDs are not sequential (expected 1, 2, 3...)',
+            suggestion: 'Reorder or renumber scenes to be sequential starting from 1'
         });
     }
 
@@ -101,7 +108,8 @@ export function validateProject(scenes, projectDuration = null) {
                 type: ErrorType.WARNING,
                 sceneId: scene.scene_id,
                 field: 'timestamp',
-                message: `Scene ${scene.scene_id}: Timestamp mismatch (expected ${expectedTimestamp}, got ${scene.timestamp})`
+                message: `Scene ${scene.scene_id}: Timestamp mismatch (expected ${expectedTimestamp}, got ${scene.timestamp})`,
+                suggestion: 'Timestamps auto-recalculate on save'
             });
         }
         cumulative += scene.duration || 0;
@@ -111,11 +119,15 @@ export function validateProject(scenes, projectDuration = null) {
     if (projectDuration !== null && projectDuration > 0) {
         const totalDuration = getTotalDuration(scenes);
         if (totalDuration !== projectDuration) {
+            const diff = projectDuration - totalDuration;
+            const action = diff > 0 ? `add ${diff}s` : `remove ${Math.abs(diff)}s`;
             errors.push({
                 type: ErrorType.WARNING,
                 sceneId: null,
                 field: 'duration',
-                message: `Total duration (${totalDuration}s) doesn't match project duration (${projectDuration}s)`
+                message: `Total duration (${totalDuration}s) doesn't match project duration (${projectDuration}s)`,
+                suggestion: `Adjust scene durations to ${action} total`,
+                fixable: true
             });
         }
     }
@@ -148,9 +160,13 @@ export function getErrorCounts(errors) {
 }
 
 // Format error for display
-export function formatError(error) {
+export function formatError(error, includeSuggestion = true) {
     const icon = error.type === ErrorType.ERROR ? '❌' : '⚠️';
-    return `${icon} ${error.message}`;
+    let formatted = `${icon} ${error.message}`;
+    if (includeSuggestion && error.suggestion) {
+        formatted += `<span class="validation-suggestion">→ ${error.suggestion}</span>`;
+    }
+    return formatted;
 }
 
 export const Validation = {

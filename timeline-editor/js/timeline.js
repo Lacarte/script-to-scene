@@ -35,6 +35,17 @@ class TimelineRenderer {
         if (this.viewport) {
             this.viewport.addEventListener('scroll', () => this.checkScroll());
             window.addEventListener('resize', () => this.checkScroll());
+
+            // Mouse wheel horizontal scrolling
+            this.viewport.addEventListener('wheel', (e) => {
+                // Only handle if there's horizontal overflow
+                if (this.viewport.scrollWidth > this.viewport.clientWidth) {
+                    e.preventDefault();
+                    // Use deltaY for vertical scroll wheel, convert to horizontal
+                    const scrollAmount = e.deltaY || e.deltaX;
+                    this.viewport.scrollLeft += scrollAmount;
+                }
+            }, { passive: false });
         }
 
         // Click on right indicator to go to last scene
@@ -108,6 +119,19 @@ class TimelineRenderer {
 
         if (countEl) countEl.innerHTML = `<strong>${sceneCount}</strong> scenes`;
         if (durEl) durEl.innerHTML = `<strong>${formatTimestamp(totalDuration)}</strong> total`;
+
+        // Update status badges
+        const doneCount = scenes ? scenes.filter(s => s.status === 'done').length : 0;
+        const pendingCount = scenes ? scenes.filter(s => s.status === 'pending').length : 0;
+        const errorCount = errors ? errors.filter(e => e.type === ErrorType.ERROR).length : 0;
+
+        const badgeDone = document.querySelector('#badge-done .badge-count');
+        const badgePending = document.querySelector('#badge-pending .badge-count');
+        const badgeError = document.querySelector('#badge-error .badge-count');
+
+        if (badgeDone) badgeDone.textContent = doneCount;
+        if (badgePending) badgePending.textContent = pendingCount;
+        if (badgeError) badgeError.textContent = errorCount;
 
         if (!scenes || scenes.length === 0) {
             this.container.innerHTML = `

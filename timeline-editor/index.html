@@ -22,9 +22,17 @@
             </button>
             <h1>Script-to-Scene Timeline</h1>
         </div>
-        <div class="sync-status">
-            <span class="status-dot"></span>
-            <span class="status-text">Ready</span>
+        <div class="header-right">
+            <div class="sync-status">
+                <span class="status-dot"></span>
+                <span class="status-text">Ready</span>
+            </div>
+            <button id="details-toggle" class="sidebar-toggle" title="Toggle Details Panel">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10 3h7v18h-7" />
+                    <rect x="17" y="3" width="4" height="18" rx="1" />
+                </svg>
+            </button>
         </div>
     </header>
 
@@ -42,10 +50,26 @@
                     <span class="timeline-info" id="stats-scenes"><strong>0</strong> scenes</span>
                     <span class="timeline-info" id="stats-duration"><strong>0:00</strong> total</span>
                 </div>
-                <div class="timeline-legend">
-                    <span class="legend-item"><span class="legend-dot done"></span>Done</span>
-                    <span class="legend-item"><span class="legend-dot pending"></span>Pending</span>
-                    <span class="legend-item"><span class="legend-dot error"></span>Error</span>
+                <div class="timeline-actions">
+                    <div class="status-badges">
+                        <span class="status-badge badge-done" id="badge-done" title="Completed scenes">
+                            <span class="badge-dot"></span><span class="badge-count">0</span>
+                        </span>
+                        <span class="status-badge badge-pending" id="badge-pending" title="Pending scenes">
+                            <span class="badge-dot"></span><span class="badge-count">0</span>
+                        </span>
+                        <span class="status-badge badge-error" id="badge-error" title="Scenes with errors">
+                            <span class="badge-dot"></span><span class="badge-count">0</span>
+                        </span>
+                    </div>
+                    <button id="export-timeline" class="btn btn-export" title="Export Timeline JSON">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Export
+                    </button>
                 </div>
             </div>
             <div class="timeline-viewport">
@@ -91,6 +115,48 @@
             </div>
             <div class="modal-footer">
                 <button id="copy-script" class="btn btn-primary">Copy Script</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="shortcuts-modal" class="modal">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h3>Keyboard Shortcuts</h3>
+                <button class="modal-close" title="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="shortcuts-list">
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>←</kbd> <kbd>→</kbd></span>
+                        <span class="shortcut-desc">Navigate scenes</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Esc</kbd></span>
+                        <span class="shortcut-desc">Deselect scene</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Del</kbd></span>
+                        <span class="shortcut-desc">Delete selected scene</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>S</kbd></span>
+                        <span class="shortcut-desc">Save all scenes</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Z</kbd></span>
+                        <span class="shortcut-desc">Undo</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd></span>
+                        <span class="shortcut-desc">Redo</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>?</kbd></span>
+                        <span class="shortcut-desc">Show this help</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
