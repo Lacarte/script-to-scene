@@ -33,8 +33,9 @@ export const STATUS_OPTIONS = ["pending", "done", "error"];
 
 // Format seconds to m:ss
 export function formatTimestamp(seconds) {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
+    const totalSeconds = Math.floor(seconds);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 

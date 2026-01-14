@@ -611,6 +611,37 @@ body {
     to { transform: rotate(360deg); }
 }
 
+/* Stage Button */
+.btn-stage {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent-primary);
+    border: 1px solid var(--accent-primary);
+    border-radius: var(--radius-sm);
+    color: var(--bg-primary);
+    cursor: pointer;
+    padding: 8px 14px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.btn-stage:hover {
+    background: var(--accent-success);
+    border-color: var(--accent-success);
+    box-shadow: 0 0 12px rgba(0, 229, 160, 0.3);
+}
+
+.btn-stage svg {
+    flex-shrink: 0;
+}
+
+.btn-stage.btn-loading {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
 .status-badge {
     display: flex;
     align-items: center;

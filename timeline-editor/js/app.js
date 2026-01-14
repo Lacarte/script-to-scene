@@ -42,6 +42,9 @@ class App {
         // Set up export button
         this.setupExportButton();
 
+        // Set up stage button
+        this.setupStageButton();
+
         // Load projects
         await this.loadProjects();
 
@@ -52,6 +55,13 @@ class App {
         const exportBtn = document.getElementById('export-timeline');
         if (exportBtn) {
             exportBtn.addEventListener('click', () => this.exportTimeline());
+        }
+    }
+
+    setupStageButton() {
+        const stageBtn = document.getElementById('stage-timeline');
+        if (stageBtn) {
+            stageBtn.addEventListener('click', () => this.stageTimeline());
         }
     }
 
@@ -518,6 +528,64 @@ class App {
         timelineArea?.classList.remove('exporting');
 
         showToast(`Timeline exported with ${imageCounter - 1} images`, 'success');
+    }
+
+    stageTimeline() {
+        const project = State.get('currentProject');
+        const scenes = State.get('scenes');
+
+        if (!project || !scenes.length) {
+            showToast('No project or scenes to stage', 'warning');
+            return;
+        }
+
+        const errors = State.get('validationErrors');
+        if (hasBlockingErrors(errors)) {
+            showToast('Cannot stage: fix validation errors first', 'error');
+            return;
+        }
+
+        // Prepare staged data
+        let imageCounter = 1;
+        const stagedData = {
+            project_id: project.project_id,
+            project_name: project.name || project.project_id,
+            total_duration: getTotalDuration(scenes),
+            scene_count: scenes.length,
+            staged_at: new Date().toISOString(),
+            scenes: scenes.map(scene => {
+                const isVisualScene = !['text', 'cta'].includes(scene.scene_type);
+                const imageFile = isVisualScene ? `image${imageCounter++}.jpg` : null;
+
+                return {
+                    id: scene.scene_id,
+                    type: scene.scene_type,
+                    timestamp: scene.timestamp,
+                    duration: scene.duration,
+                    description: scene.description || '',
+                    visual_fx: scene.visual_fx,
+                    style: scene.style || '',
+                    status: scene.status,
+                    ...(isVisualScene && {
+                        image: imageFile,
+                        prompt: scene.prompt || ''
+                    }),
+                    ...(!isVisualScene && {
+                        text_content: scene.text_content || '',
+                        text_bg: scene.text_bg || ''
+                    })
+                };
+            })
+        };
+
+        // Store in sessionStorage for Stage 2 to read
+        sessionStorage.setItem('staged_timeline', JSON.stringify(stagedData));
+
+        // Navigate to Stage 2 editor
+        showToast('Timeline staged! Opening video editor...', 'success');
+        setTimeout(() => {
+            window.location.href = 'editor.html';
+        }, 500);
     }
 
     restoreFromBackup() {
