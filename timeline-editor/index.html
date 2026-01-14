@@ -39,12 +39,20 @@
     <div class="app-layout" data-sidebar="collapsed">
         <aside class="sidebar">
             <h2>Projects</h2>
+            <div id="projects-loading" class="loading-container">
+                <div class="loading-spinner"></div>
+                <span>Loading projects...</span>
+            </div>
             <ul id="project-list">
                 <!-- Project items will be injected here -->
             </ul>
         </aside>
 
         <main class="timeline-area">
+            <div id="timeline-loading" class="loading-overlay hidden">
+                <div class="loading-spinner"></div>
+                <span>Loading scenes...</span>
+            </div>
             <div class="timeline-header">
                 <div class="timeline-info-group">
                     <span class="timeline-info" id="stats-scenes"><strong>0</strong> scenes</span>

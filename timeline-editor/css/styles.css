@@ -1595,3 +1595,58 @@ kbd {
         display: none;
     }
 }
+
+/* Loading States */
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 32px 16px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.loading-container.hidden {
+    display: none;
+}
+
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.loading-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(13, 13, 18, 0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    z-index: 100;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.loading-overlay.hidden {
+    display: none;
+}
+
+.loading-overlay .loading-spinner {
+    width: 48px;
+    height: 48px;
+    border-width: 4px;
+}
+
+/* Project list loading state */
+#project-list:empty + .loading-container,
+#project-list.loading ~ .loading-container {
+    display: flex;
+}

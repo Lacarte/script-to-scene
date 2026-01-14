@@ -116,7 +116,12 @@ class App {
     }
 
     async loadProjects() {
+        const projectsLoading = document.getElementById('projects-loading');
+
         try {
+            // Show loading state
+            if (projectsLoading) projectsLoading.classList.remove('hidden');
+
             const projects = await API.fetchProjects();
 
             // Sort by date descending
@@ -135,13 +140,20 @@ class App {
         } catch (error) {
             console.error('Failed to load projects:', error);
             showToast('Failed to load projects', 'error');
+        } finally {
+            // Hide loading state
+            if (projectsLoading) projectsLoading.classList.add('hidden');
         }
     }
 
     async selectProject(project) {
         State.selectProject(project);
+        const timelineLoading = document.getElementById('timeline-loading');
 
         try {
+            // Show loading overlay
+            if (timelineLoading) timelineLoading.classList.remove('hidden');
+
             const scenes = await API.fetchScenes(project.project_id, project.chat_id);
 
             if (scenes.length === 0 && project.scenes_json) {
@@ -161,6 +173,9 @@ class App {
         } catch (error) {
             console.error('Failed to load scenes:', error);
             showToast('Failed to load scenes', 'error');
+        } finally {
+            // Hide loading overlay
+            if (timelineLoading) timelineLoading.classList.add('hidden');
         }
     }
 

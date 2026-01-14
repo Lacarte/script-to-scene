@@ -288,10 +288,13 @@ function loadProject(data) {
 }
 
 /**
- * Load default audio from working-assets folder
+ * Load audio from working-assets/{project_id}/main-audio.mp3
  */
 function loadDefaultAudio() {
-    const audioPath = 'working-assets/main-audio.mp3';
+    // Use project_id as folder name, main-audio.mp3 as filename
+    const projectId = EditorState.project?.id || 'default';
+    const audioFileName = 'main-audio.mp3';
+    const audioPath = `working-assets/${projectId}/${audioFileName}`;
 
     // Create audio element
     const audio = new Audio(audioPath);
@@ -299,7 +302,7 @@ function loadDefaultAudio() {
 
     // Store audio info in state
     EditorState.audio = {
-        file: 'main-audio.mp3',
+        file: audioFileName,
         path: audioPath,
         duration: 0,
         loaded: false
@@ -318,7 +321,7 @@ function loadDefaultAudio() {
         EditorState.audio.loaded = false;
         EditorState.audio.error = true;
         renderAudioTrack();
-        showToast('Audio not found: Place main-audio.mp3 in working-assets folder', 'warning');
+        showToast(`Audio not found: Place ${audioFileName} in working-assets/${projectId}/`, 'warning');
     });
 
     // Handle audio ended event for looping
