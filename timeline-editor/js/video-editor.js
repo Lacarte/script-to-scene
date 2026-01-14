@@ -5,7 +5,10 @@
 
 import { SCENE_COLORS, formatTimestamp, showToast } from './utils.js';
 import { CanvasPreview } from './preview.js';
-import { prepareExportData, validateExportData } from './export-api.js';
+import { ExportAPI, prepareExportData, validateExportData } from './export-api.js';
+
+// Export API instance
+const exportAPI = new ExportAPI();
 
 // Editor State
 const EditorState = {
@@ -136,8 +139,17 @@ const elements = {
     infoScenes: document.getElementById('info-scenes'),
     infoDuration: document.getElementById('info-duration'),
     sceneProperties: document.getElementById('scene-properties'),
+    previewJsonBtn: document.getElementById('preview-json'),
     exportBtn: document.getElementById('export-mp4'),
-    timeRuler: document.getElementById('time-ruler')
+    timeRuler: document.getElementById('time-ruler'),
+    // Export progress modal
+    exportProgressModal: document.getElementById('export-progress-modal'),
+    exportProgressTitle: document.getElementById('export-progress-title'),
+    exportProgressBar: document.getElementById('export-progress-bar'),
+    exportProgressPercent: document.getElementById('export-progress-percent'),
+    exportProgressMessage: document.getElementById('export-progress-message'),
+    cancelExportBtn: document.getElementById('cancel-export'),
+    downloadExportBtn: document.getElementById('download-export')
 };
 
 /**
@@ -1032,6 +1044,9 @@ function setupEventListeners() {
         });
     }
 
+    // Preview JSON button
+    elements.previewJsonBtn?.addEventListener('click', previewJson);
+
     // Export MP4
     elements.exportBtn?.addEventListener('click', exportMp4);
 
@@ -1333,9 +1348,9 @@ async function matchMediaToScenes() {
 }
 
 /**
- * Export - Show JSON modal with validation
+ * Get prepared export data with audio config
  */
-function exportMp4() {
+function getExportData() {
     // Prepare audio config if audio is loaded
     const audioConfig = EditorState.audio?.loaded ? {
         file: EditorState.audio.file,
@@ -1347,12 +1362,19 @@ function exportMp4() {
     } : null;
 
     // Prepare export data
-    const exportData = prepareExportData(
+    return prepareExportData(
         EditorState.project,
         EditorState.scenes,
         '',
         audioConfig
     );
+}
+
+/**
+ * Preview JSON - Show JSON modal with validation
+ */
+function previewJson() {
+    const exportData = getExportData();
 
     // Validate export data
     const validation = validateExportData(exportData);
@@ -1360,7 +1382,6 @@ function exportMp4() {
     // Show validation warnings/errors
     if (!validation.valid) {
         showToast(`Export errors: ${validation.errors.join(', ')}`, 'error');
-        return;
     }
 
     if (validation.warnings.length > 0) {
@@ -1375,6 +1396,175 @@ function exportMp4() {
     if (modal && jsonPre) {
         jsonPre.textContent = JSON.stringify(exportData, null, 2);
         modal.classList.add('active');
+    }
+}
+
+/**
+ * Export MP4 - Send to backend for processing
+ */
+async function exportMp4() {
+    const exportData = getExportData();
+
+    // Validate export data
+    const validation = validateExportData(exportData);
+
+    if (!validation.valid) {
+        showToast(`Export errors: ${validation.errors.join(', ')}`, 'error');
+        return;
+    }
+
+    if (validation.warnings.length > 0) {
+        console.warn('Export warnings:', validation.warnings);
+    }
+
+    // Show progress modal
+    showExportProgress();
+
+    // Track current job for download
+    let currentJobId = null;
+
+    // Start export
+    const jobId = await exportAPI.startExport(
+        exportData,
+        // Progress callback
+        (progress, message) => {
+            updateExportProgress(progress, message);
+        },
+        // Complete callback
+        (success, result) => {
+            if (success) {
+                currentJobId = result.jobId;
+                showExportComplete(result.downloadUrl);
+            } else {
+                showExportError(result.error);
+            }
+        }
+    );
+
+    if (!jobId) {
+        // Export failed to start - error already shown via callback
+        return;
+    }
+
+    // Setup cancel button
+    elements.cancelExportBtn?.addEventListener('click', async () => {
+        await exportAPI.cancelExport();
+        hideExportProgress();
+        showToast('Export cancelled', 'info');
+    }, { once: true });
+
+    // Setup download button
+    elements.downloadExportBtn?.addEventListener('click', () => {
+        if (currentJobId) {
+            exportAPI.downloadExport(currentJobId);
+        }
+    }, { once: true });
+}
+
+/**
+ * Show export progress modal
+ */
+function showExportProgress() {
+    if (elements.exportProgressModal) {
+        elements.exportProgressModal.classList.add('active');
+        elements.exportProgressModal.classList.remove('export-complete', 'export-error');
+    }
+    if (elements.exportProgressTitle) {
+        elements.exportProgressTitle.textContent = 'Exporting Video...';
+    }
+    if (elements.exportProgressBar) {
+        elements.exportProgressBar.style.width = '0%';
+    }
+    if (elements.exportProgressPercent) {
+        elements.exportProgressPercent.textContent = '0%';
+    }
+    if (elements.exportProgressMessage) {
+        elements.exportProgressMessage.textContent = 'Starting export...';
+    }
+    if (elements.cancelExportBtn) {
+        elements.cancelExportBtn.classList.remove('hidden');
+    }
+    if (elements.downloadExportBtn) {
+        elements.downloadExportBtn.classList.add('hidden');
+    }
+}
+
+/**
+ * Update export progress
+ */
+function updateExportProgress(progress, message) {
+    if (elements.exportProgressBar) {
+        elements.exportProgressBar.style.width = `${progress}%`;
+    }
+    if (elements.exportProgressPercent) {
+        elements.exportProgressPercent.textContent = `${Math.round(progress)}%`;
+    }
+    if (elements.exportProgressMessage) {
+        elements.exportProgressMessage.textContent = message;
+    }
+}
+
+/**
+ * Show export complete state
+ */
+function showExportComplete(downloadUrl) {
+    if (elements.exportProgressModal) {
+        elements.exportProgressModal.classList.add('export-complete');
+    }
+    if (elements.exportProgressTitle) {
+        elements.exportProgressTitle.textContent = 'Export Complete!';
+    }
+    if (elements.exportProgressBar) {
+        elements.exportProgressBar.style.width = '100%';
+    }
+    if (elements.exportProgressPercent) {
+        elements.exportProgressPercent.textContent = '100%';
+    }
+    if (elements.exportProgressMessage) {
+        elements.exportProgressMessage.textContent = 'Your video is ready for download';
+    }
+    if (elements.cancelExportBtn) {
+        elements.cancelExportBtn.classList.add('hidden');
+    }
+    if (elements.downloadExportBtn) {
+        elements.downloadExportBtn.classList.remove('hidden');
+    }
+    showToast('Export completed!', 'success');
+}
+
+/**
+ * Show export error state
+ */
+function showExportError(error) {
+    if (elements.exportProgressModal) {
+        elements.exportProgressModal.classList.add('export-error');
+    }
+    if (elements.exportProgressTitle) {
+        elements.exportProgressTitle.textContent = 'Export Failed';
+    }
+    if (elements.exportProgressMessage) {
+        elements.exportProgressMessage.textContent = error || 'An error occurred during export';
+    }
+    if (elements.cancelExportBtn) {
+        elements.cancelExportBtn.textContent = 'Close';
+        elements.cancelExportBtn.classList.remove('hidden');
+    }
+    if (elements.downloadExportBtn) {
+        elements.downloadExportBtn.classList.add('hidden');
+    }
+    showToast(`Export failed: ${error}`, 'error');
+}
+
+/**
+ * Hide export progress modal
+ */
+function hideExportProgress() {
+    if (elements.exportProgressModal) {
+        elements.exportProgressModal.classList.remove('active', 'export-complete', 'export-error');
+    }
+    // Reset cancel button text
+    if (elements.cancelExportBtn) {
+        elements.cancelExportBtn.textContent = 'Cancel';
     }
 }
 
@@ -1429,6 +1619,25 @@ function setupExportModal() {
         a.click();
         URL.revokeObjectURL(url);
         showToast('JSON downloaded', 'success');
+    });
+
+    // Export progress modal - close on backdrop click (only when complete/error)
+    elements.exportProgressModal?.addEventListener('click', (e) => {
+        if (e.target === elements.exportProgressModal &&
+            (elements.exportProgressModal.classList.contains('export-complete') ||
+             elements.exportProgressModal.classList.contains('export-error'))) {
+            hideExportProgress();
+        }
+    });
+
+    // Close progress modal on Escape (only when complete/error)
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Escape' && elements.exportProgressModal?.classList.contains('active')) {
+            if (elements.exportProgressModal.classList.contains('export-complete') ||
+                elements.exportProgressModal.classList.contains('export-error')) {
+                hideExportProgress();
+            }
+        }
     });
 }
 

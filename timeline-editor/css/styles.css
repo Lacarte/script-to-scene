@@ -1449,11 +1449,20 @@ kbd {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-/* Toast Notifications */
-.toast {
+/* Toast Container */
+.toast-container {
     position: fixed;
     bottom: 24px;
     right: 24px;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 8px;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+/* Toast Notifications */
+.toast {
     padding: 14px 20px;
     border-radius: var(--radius-md);
     background: var(--bg-elevated);
@@ -1461,15 +1470,16 @@ kbd {
     font-size: 0.85rem;
     font-weight: 500;
     box-shadow: var(--shadow-lg);
-    transform: translateY(100px);
+    transform: translateX(120%);
     opacity: 0;
     transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 1000;
     border: 1px solid var(--border-light);
+    pointer-events: auto;
+    max-width: 320px;
 }
 
 .toast.show {
-    transform: translateY(0);
+    transform: translateX(0);
     opacity: 1;
 }
 

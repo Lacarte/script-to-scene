@@ -25,9 +25,20 @@
             <span class="project-name" id="project-name">No project loaded</span>
         </div>
         <div class="header-right">
+            <button id="preview-json" class="btn btn-secondary" title="Preview Export JSON">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                JSON
+            </button>
             <button id="export-mp4" class="btn btn-stage" title="Export MP4 Video">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="5 3 19 12 5 21 5 3" />
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
                 Export
             </button>
@@ -196,6 +207,30 @@
             <div class="modal-footer">
                 <button id="copy-export-json" class="btn btn-secondary">Copy JSON</button>
                 <button id="download-export-json" class="btn btn-stage">Download JSON</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Progress Modal -->
+    <div id="export-progress-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="export-progress-title">Exporting Video...</h3>
+            </div>
+            <div class="modal-body">
+                <div class="export-progress-container">
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="export-progress-bar" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-info">
+                        <span id="export-progress-percent">0%</span>
+                        <span id="export-progress-message">Starting export...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" id="export-progress-footer">
+                <button id="cancel-export" class="btn btn-secondary">Cancel</button>
+                <button id="download-export" class="btn btn-stage hidden">Download MP4</button>
             </div>
         </div>
     </div>

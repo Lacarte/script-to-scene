@@ -7,6 +7,7 @@ import os
 import uuid
 import json
 import threading
+import subprocess
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from video_processor import VideoProcessor
@@ -22,10 +23,24 @@ EXPORT_DIR = os.path.join(os.path.dirname(__file__), 'exports')
 os.makedirs(EXPORT_DIR, exist_ok=True)
 
 
+def check_ffmpeg():
+    """Check if FFmpeg is available"""
+    try:
+        result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True)
+        return result.returncode == 0
+    except FileNotFoundError:
+        return False
+
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
-    return jsonify({'status': 'ok', 'version': '1.0.0'})
+    ffmpeg_available = check_ffmpeg()
+    return jsonify({
+        'status': 'ok',
+        'version': '1.0.0',
+        'ffmpeg': ffmpeg_available
+    })
 
 
 @app.route('/api/export', methods=['POST'])
@@ -113,7 +128,7 @@ def start_export():
         return jsonify({'error': str(e)}), 500
 
 
-def process_video(job_id, data, output_path):
+def process_video(job_id, export_data, output_path):
     """Process video in background thread"""
     try:
         jobs[job_id]['status'] = 'processing'
@@ -123,20 +138,22 @@ def process_video(job_id, data, output_path):
             jobs[job_id]['progress'] = progress
             jobs[job_id]['message'] = message
 
-        # Create processor and run
+        # Create processor with full export data and run
         processor = VideoProcessor(
-            media_folder=data.get('media_folder', ''),
-            output_config=data.get('output', {}),
+            export_data=export_data,
             progress_callback=update_progress
         )
 
-        processor.process(data['scenes'], output_path, data.get('audio'))
+        processor.process(output_path)
 
         jobs[job_id]['status'] = 'completed'
         jobs[job_id]['progress'] = 100
         jobs[job_id]['message'] = 'Export completed successfully'
 
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Export error: {error_details}")
         jobs[job_id]['status'] = 'failed'
         jobs[job_id]['error'] = str(e)
         jobs[job_id]['message'] = f'Export failed: {str(e)}'

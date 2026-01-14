@@ -844,6 +844,61 @@
     margin: 0;
 }
 
+/* Export Progress */
+.export-progress-container {
+    padding: 20px 0;
+}
+
+.progress-bar-container {
+    width: 100%;
+    height: 8px;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.progress-bar {
+    height: 100%;
+    background: var(--accent-primary);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+}
+
+#export-progress-percent {
+    font-weight: 600;
+    color: var(--accent-primary);
+}
+
+#export-progress-message {
+    color: var(--text-secondary);
+}
+
+/* Export complete state */
+.export-complete .progress-bar {
+    background: var(--success);
+}
+
+.export-complete #export-progress-percent {
+    color: var(--success);
+}
+
+/* Export error state */
+.export-error .progress-bar {
+    background: var(--error);
+}
+
+.export-error #export-progress-percent {
+    color: var(--error);
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
     .editor-layout {

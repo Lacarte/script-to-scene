@@ -117,16 +117,36 @@ export const Storage = {
     }
 };
 
-// Show toast notification
-export function showToast(message, type = 'info') {
+// Toast container and queue management
+let toastContainer = null;
+let toastQueue = [];
+let isProcessingQueue = false;
+
+function getToastContainer() {
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.className = 'toast-container';
+        document.body.appendChild(toastContainer);
+    }
+    return toastContainer;
+}
+
+// Show toast notification with vertical stacking and delay
+export function showToast(message, type = 'info', delay = 0) {
+    const container = getToastContainer();
+
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.textContent = message;
-    document.body.appendChild(toast);
+    container.appendChild(toast);
 
-    setTimeout(() => toast.classList.add('show'), 10);
+    // Stagger the appearance based on existing toasts
+    const existingToasts = container.querySelectorAll('.toast.show').length;
+    const staggerDelay = delay || existingToasts * 150;
+
+    setTimeout(() => toast.classList.add('show'), 10 + staggerDelay);
     setTimeout(() => {
         toast.classList.remove('show');
         setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    }, 3000 + staggerDelay);
 }

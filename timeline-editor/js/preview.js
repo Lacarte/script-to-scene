@@ -266,15 +266,7 @@ export class CanvasPreview {
         const textColor = scene.text_color || 'white';
         const bgImage = textColor === 'white' ? this.textBackgrounds.white : this.textBackgrounds.black;
 
-        // Apply fade effect based on progress
-        const fadeIn = Math.min(1, progress * 4);  // Fade in during first 25%
-        const fadeOut = Math.min(1, (1 - progress) * 4);  // Fade out during last 25%
-        const alpha = Math.min(fadeIn, fadeOut);
-
-        this.ctx.save();
-        this.ctx.globalAlpha = alpha;
-
-        // Render background image if available, otherwise solid color
+        // Render background at full opacity (no fade on background)
         if (bgImage) {
             this.renderBackgroundImage(bgImage);
         } else {
@@ -283,11 +275,10 @@ export class CanvasPreview {
             this.ctx.fillRect(0, 0, this.width, this.height);
         }
 
-        this.ctx.restore();
-
-        // Render text on top (with its own fade)
-        if (scene.script) {
-            this.renderTextOverlay(scene.script, progress, textColor);
+        // Render text on top with fade effect
+        const textContent = scene.text_content || scene.script;
+        if (textContent) {
+            this.renderTextOverlay(textContent, progress, textColor);
         }
     }
 

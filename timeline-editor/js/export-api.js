@@ -13,18 +13,38 @@ export class ExportAPI {
     }
 
     /**
-     * Check if the backend server is available
+     * Check if the backend server is available and FFmpeg is installed
+     * @returns {Object} { available: boolean, ffmpeg: boolean, error: string|null }
      */
     async checkHealth() {
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+
             const response = await fetch(`${this.baseUrl}/api/health`, {
                 method: 'GET',
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal
             });
-            return response.ok;
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                return { available: false, ffmpeg: false, error: 'Server returned error' };
+            }
+
+            const data = await response.json();
+            return {
+                available: true,
+                ffmpeg: data.ffmpeg === true,
+                error: null
+            };
         } catch (error) {
+            if (error.name === 'AbortError') {
+                return { available: false, ffmpeg: false, error: 'Server timeout' };
+            }
             console.error('Health check failed:', error);
-            return false;
+            return { available: false, ffmpeg: false, error: error.message };
         }
     }
 
@@ -37,9 +57,19 @@ export class ExportAPI {
     async startExport(exportData, onProgress, onComplete) {
         try {
             // Check server health first
-            const healthy = await this.checkHealth();
-            if (!healthy) {
-                onComplete(false, { error: 'Backend server not available. Please start the server.' });
+            const health = await this.checkHealth();
+
+            if (!health.available) {
+                onComplete(false, {
+                    error: `Backend server not available. ${health.error || 'Please run run.bat to start the server.'}`
+                });
+                return null;
+            }
+
+            if (!health.ffmpeg) {
+                onComplete(false, {
+                    error: 'FFmpeg not found. Please install FFmpeg to backend/bin/ folder.'
+                });
                 return null;
             }
 
@@ -79,14 +109,26 @@ export class ExportAPI {
             clearInterval(this.pollInterval);
         }
 
-        this.pollInterval = setInterval(async () => {
+        // Track consecutive failures for resilience
+        let consecutiveFailures = 0;
+        const maxFailures = 5;
+
+        const poll = async () => {
             const status = await this.getStatus();
 
             if (!status) {
-                this.stopPolling();
-                onComplete(false, { error: 'Failed to get export status' });
+                consecutiveFailures++;
+                console.warn(`Status check failed (${consecutiveFailures}/${maxFailures})`);
+
+                if (consecutiveFailures >= maxFailures) {
+                    this.stopPolling();
+                    onComplete(false, { error: 'Lost connection to server. Please check if the backend is running.' });
+                }
                 return;
             }
+
+            // Reset failure counter on success
+            consecutiveFailures = 0;
 
             onProgress(status.progress, status.message);
 
@@ -100,7 +142,13 @@ export class ExportAPI {
                 this.stopPolling();
                 onComplete(false, { error: status.error || status.message });
             }
-        }, 1000); // Poll every second
+        };
+
+        // Initial poll immediately
+        poll();
+
+        // Then poll every 2 seconds (less aggressive)
+        this.pollInterval = setInterval(poll, 2000);
     }
 
     /**
@@ -120,14 +168,24 @@ export class ExportAPI {
         if (!this.currentJobId) return null;
 
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
             const response = await fetch(
-                `${this.baseUrl}/api/export/${this.currentJobId}/status`
+                `${this.baseUrl}/api/export/${this.currentJobId}/status`,
+                { signal: controller.signal }
             );
+
+            clearTimeout(timeoutId);
 
             if (!response.ok) return null;
             return await response.json();
         } catch (error) {
-            console.error('Status check failed:', error);
+            if (error.name === 'AbortError') {
+                console.warn('Status check timed out');
+            } else {
+                console.error('Status check failed:', error);
+            }
             return null;
         }
     }
@@ -246,7 +304,7 @@ export function prepareExportData(project, scenes, mediaFolder, audioConfig = nu
 
                 // Text content (for text-type scenes)
                 text: isTextScene ? {
-                    content: scene.script || '',
+                    content: scene.text_content || scene.script || '',
                     font: 'Inter',
                     font_size: 48,
                     font_weight: 'bold',
@@ -395,7 +453,10 @@ export function validateExportData(exportData) {
         }
 
         if (scene.media.type === 'text' && !scene.text?.content) {
-            warnings.push(`Scene ${index + 1}: Text scene has no content`);
+            // Only warn if it's explicitly a text type, not CTA (which may just show background)
+            if (scene.type === 'text') {
+                warnings.push(`Scene ${index + 1}: Text scene has no script content (will show background only)`);
+            }
         }
     });
 
