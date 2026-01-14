@@ -306,9 +306,16 @@ async function autoLoadProjectMedia() {
     let loadedCount = 0;
 
     // Try to load image for each scene (scenes are 1-indexed in naming)
+    // Skip text-type scenes - they don't need images
     for (let i = 0; i < EditorState.scenes.length; i++) {
         const scene = EditorState.scenes[i];
         const sceneNumber = i + 1; // Scene numbers start at 1
+
+        // Skip text scenes - they render text overlay instead of images
+        if (scene.type === 'text') {
+            console.log(`Skipping scene ${sceneNumber}: text type`);
+            continue;
+        }
 
         // Try each extension until one works
         for (const ext of imageExtensions) {

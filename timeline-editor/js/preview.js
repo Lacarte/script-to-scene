@@ -192,6 +192,74 @@ export class CanvasPreview {
         } else {
             this.renderPlaceholder(scene);
         }
+
+        // Render text overlay for text-type scenes
+        if (scene.type === 'text' && scene.script) {
+            this.renderTextOverlay(scene.script, progress);
+        }
+    }
+
+    /**
+     * Render text overlay - white text centered on screen
+     */
+    renderTextOverlay(text, progress) {
+        this.ctx.save();
+
+        // Apply fade effect based on progress
+        const fadeIn = Math.min(1, progress * 4); // Fade in during first 25%
+        const fadeOut = Math.min(1, (1 - progress) * 4); // Fade out during last 25%
+        this.ctx.globalAlpha = Math.min(fadeIn, fadeOut);
+
+        // Text styling
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+
+        // Calculate font size based on text length and canvas size
+        const maxWidth = this.width * 0.8;
+        const baseFontSize = Math.min(48, this.height / 10);
+
+        // Word wrap the text
+        const lines = this.wrapText(text, maxWidth, baseFontSize);
+        const lineHeight = baseFontSize * 1.3;
+        const totalHeight = lines.length * lineHeight;
+        const startY = (this.height - totalHeight) / 2 + lineHeight / 2;
+
+        // Draw each line
+        this.ctx.font = `bold ${baseFontSize}px Inter, sans-serif`;
+        lines.forEach((line, index) => {
+            this.ctx.fillText(line, this.width / 2, startY + index * lineHeight);
+        });
+
+        this.ctx.restore();
+    }
+
+    /**
+     * Wrap text to fit within maxWidth
+     */
+    wrapText(text, maxWidth, fontSize) {
+        this.ctx.font = `bold ${fontSize}px Inter, sans-serif`;
+        const words = text.split(' ');
+        const lines = [];
+        let currentLine = '';
+
+        for (const word of words) {
+            const testLine = currentLine ? `${currentLine} ${word}` : word;
+            const metrics = this.ctx.measureText(testLine);
+
+            if (metrics.width > maxWidth && currentLine) {
+                lines.push(currentLine);
+                currentLine = word;
+            } else {
+                currentLine = testLine;
+            }
+        }
+
+        if (currentLine) {
+            lines.push(currentLine);
+        }
+
+        return lines;
     }
 
     /**
