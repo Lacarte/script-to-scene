@@ -284,7 +284,89 @@ function loadProject(data) {
     // Load default audio
     loadDefaultAudio();
 
+    // Auto-load images from working-assets/{project_id}/
+    autoLoadProjectMedia();
+
     showToast(`Loaded project: ${EditorState.project.name}`, 'success');
+}
+
+/**
+ * Auto-load images from working-assets/{project_id}/
+ * Looks for files named 1.jpg, 1.png, 2.jpg, 2.png, etc. for each scene
+ */
+async function autoLoadProjectMedia() {
+    const projectId = EditorState.project?.id;
+    if (!projectId) {
+        console.warn('No project ID available for auto-loading media');
+        return;
+    }
+
+    const basePath = `working-assets/${projectId}/`;
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+    let loadedCount = 0;
+
+    // Try to load image for each scene (scenes are 1-indexed in naming)
+    for (let i = 0; i < EditorState.scenes.length; i++) {
+        const scene = EditorState.scenes[i];
+        const sceneNumber = i + 1; // Scene numbers start at 1
+
+        // Try each extension until one works
+        for (const ext of imageExtensions) {
+            const imagePath = `${basePath}${sceneNumber}.${ext}`;
+
+            try {
+                // Create a test image to check if file exists
+                const exists = await checkImageExists(imagePath);
+                if (exists) {
+                    scene.mediaUrl = imagePath;
+                    scene.mediaLoaded = true;
+                    scene.image = `${sceneNumber}.${ext}`;
+                    loadedCount++;
+                    console.log(`Loaded scene ${sceneNumber}: ${imagePath}`);
+                    break; // Found image, stop trying other extensions
+                }
+            } catch (error) {
+                // File doesn't exist with this extension, try next
+                continue;
+            }
+        }
+    }
+
+    // Update UI if any images were loaded
+    if (loadedCount > 0) {
+        // Hide placeholder if we have media
+        elements.previewPlaceholder?.classList.add('hidden');
+
+        // Update timeline to show thumbnails
+        renderTimeline();
+
+        // Update preview with loaded media
+        if (EditorState.preview) {
+            EditorState.preview.setScenes(EditorState.scenes);
+            EditorState.preview.render();
+        }
+
+        // Update media status
+        if (elements.mediaStatus) {
+            elements.mediaStatus.textContent = `${loadedCount} images loaded`;
+        }
+
+        showToast(`Auto-loaded ${loadedCount} scene images`, 'success');
+    } else {
+        showToast(`No images found in working-assets/${projectId}/`, 'info');
+    }
+}
+
+/**
+ * Check if an image exists at the given path
+ */
+function checkImageExists(imagePath) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+        img.src = imagePath;
+    });
 }
 
 /**
