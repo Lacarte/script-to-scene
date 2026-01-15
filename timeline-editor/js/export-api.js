@@ -305,12 +305,20 @@ export function prepareExportData(project, scenes, mediaFolder, audioConfig = nu
                 // Text content (for text-type scenes)
                 text: isTextScene ? {
                     content: scene.text_content || scene.script || '',
-                    font: 'Inter',
-                    font_size: 48,
-                    font_weight: 'bold',
+                    font_family: scene.font_family || 'Inter',
+                    font_size: scene.text_size || 48,
+                    font_style: scene.font_style || 'bold',
                     // Text color: 'white' or 'black' (determines background)
                     color: scene.text_color || 'white',
                     color_hex: (scene.text_color || 'white') === 'white' ? '#ffffff' : '#000000',
+                    // Text position (percentage 0-100, null = use alignment)
+                    position: {
+                        x: scene.text_x ?? null,  // null means use text_align
+                        y: scene.text_y ?? null   // null means use vertical_align
+                    },
+                    // Text alignment (used when position is null)
+                    text_align: scene.text_align || 'center',
+                    vertical_align: scene.vertical_align || 'center',
                     // Background options
                     background: {
                         // Use image background if available
@@ -321,8 +329,6 @@ export function prepareExportData(project, scenes, mediaFolder, audioConfig = nu
                         // Fallback solid color if no image
                         fallback_color: (scene.text_color || 'white') === 'white' ? '#000000' : '#ffffff'
                     },
-                    alignment: 'center',
-                    padding: 80,
                     fade_in: 0.25,   // Fade in during first 25% of duration
                     fade_out: 0.25  // Fade out during last 25% of duration
                 } : null,

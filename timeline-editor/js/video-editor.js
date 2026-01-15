@@ -122,7 +122,12 @@ function saveProjectEdits() {
         text_content: scene.text_content,
         text_color: scene.text_color,
         text_size: scene.text_size,
-        font_style: scene.font_style
+        font_family: scene.font_family,
+        font_style: scene.font_style,
+        text_align: scene.text_align,
+        vertical_align: scene.vertical_align,
+        text_x: scene.text_x,
+        text_y: scene.text_y
     }));
 
     // Include audio settings if audio is loaded
@@ -169,7 +174,12 @@ function loadProjectEdits() {
                 if (edit.text_content !== undefined) scene.text_content = edit.text_content;
                 if (edit.text_color !== undefined) scene.text_color = edit.text_color;
                 if (edit.text_size !== undefined) scene.text_size = edit.text_size;
+                if (edit.font_family !== undefined) scene.font_family = edit.font_family;
                 if (edit.font_style !== undefined) scene.font_style = edit.font_style;
+                if (edit.text_align !== undefined) scene.text_align = edit.text_align;
+                if (edit.vertical_align !== undefined) scene.vertical_align = edit.vertical_align;
+                if (edit.text_x !== undefined) scene.text_x = edit.text_x;
+                if (edit.text_y !== undefined) scene.text_y = edit.text_y;
                 appliedCount++;
             }
         }
@@ -1088,6 +1098,18 @@ function loadProject(data) {
         EditorState.preview.setScenes(EditorState.scenes);
         // Initial render to show placeholder/scene
         EditorState.preview.render();
+
+        // Enable text dragging on preview canvas
+        EditorState.preview.enableTextDrag((x, y, scene) => {
+            // Record edit for undo/redo (debounced to avoid spam)
+            if (!EditorState._textDragDebounce) {
+                EditorState._textDragDebounce = setTimeout(() => {
+                    recordEdit(`Move text position (Scene ${scene.id})`, scene.id, 'text_position', null, { x, y });
+                    saveProjectEdits();
+                    EditorState._textDragDebounce = null;
+                }, 500);
+            }
+        });
     }
 
     // Reset playback position to start
@@ -1755,18 +1777,35 @@ function renderSceneProperties() {
                 <textarea class="property-textarea" id="prop-text-content"
                           rows="4" placeholder="Enter text to display...">${scene.text_content || scene.script || ''}</textarea>
             </div>
+            <div class="property-group">
+                <label>Font Family</label>
+                <select class="property-select" id="prop-font-family">
+                    <option value="Inter" ${(scene.font_family || 'Inter') === 'Inter' ? 'selected' : ''}>Inter</option>
+                    <option value="Arial" ${scene.font_family === 'Arial' ? 'selected' : ''}>Arial</option>
+                    <option value="Helvetica" ${scene.font_family === 'Helvetica' ? 'selected' : ''}>Helvetica</option>
+                    <option value="Georgia" ${scene.font_family === 'Georgia' ? 'selected' : ''}>Georgia</option>
+                    <option value="Times New Roman" ${scene.font_family === 'Times New Roman' ? 'selected' : ''}>Times New Roman</option>
+                    <option value="Verdana" ${scene.font_family === 'Verdana' ? 'selected' : ''}>Verdana</option>
+                    <option value="Trebuchet MS" ${scene.font_family === 'Trebuchet MS' ? 'selected' : ''}>Trebuchet MS</option>
+                    <option value="Impact" ${scene.font_family === 'Impact' ? 'selected' : ''}>Impact</option>
+                    <option value="Comic Sans MS" ${scene.font_family === 'Comic Sans MS' ? 'selected' : ''}>Comic Sans MS</option>
+                    <option value="Courier New" ${scene.font_family === 'Courier New' ? 'selected' : ''}>Courier New</option>
+                    <option value="Montserrat" ${scene.font_family === 'Montserrat' ? 'selected' : ''}>Montserrat</option>
+                    <option value="Roboto" ${scene.font_family === 'Roboto' ? 'selected' : ''}>Roboto</option>
+                    <option value="Open Sans" ${scene.font_family === 'Open Sans' ? 'selected' : ''}>Open Sans</option>
+                    <option value="Playfair Display" ${scene.font_family === 'Playfair Display' ? 'selected' : ''}>Playfair Display</option>
+                    <option value="Oswald" ${scene.font_family === 'Oswald' ? 'selected' : ''}>Oswald</option>
+                    <option value="Poppins" ${scene.font_family === 'Poppins' ? 'selected' : ''}>Poppins</option>
+                </select>
+            </div>
             <div class="property-row">
                 <div class="property-group property-half">
-                    <label>Size</label>
-                    <select class="property-select" id="prop-text-size">
-                        <option value="small" ${scene.text_size === 'small' ? 'selected' : ''}>Small</option>
-                        <option value="medium" ${(scene.text_size || 'medium') === 'medium' ? 'selected' : ''}>Medium</option>
-                        <option value="large" ${scene.text_size === 'large' ? 'selected' : ''}>Large</option>
-                        <option value="xlarge" ${scene.text_size === 'xlarge' ? 'selected' : ''}>X-Large</option>
-                    </select>
+                    <label>Font Size (px)</label>
+                    <input type="number" class="property-input" id="prop-text-size"
+                           value="${scene.text_size || 48}" min="12" max="200" step="2">
                 </div>
                 <div class="property-group property-half">
-                    <label>Style</label>
+                    <label>Font Style</label>
                     <select class="property-select" id="prop-font-style">
                         <option value="bold" ${(scene.font_style || 'bold') === 'bold' ? 'selected' : ''}>Bold</option>
                         <option value="normal" ${scene.font_style === 'normal' ? 'selected' : ''}>Regular</option>
@@ -1776,12 +1815,43 @@ function renderSceneProperties() {
                     </select>
                 </div>
             </div>
+            <div class="property-row">
+                <div class="property-group property-half">
+                    <label>Text Align</label>
+                    <select class="property-select" id="prop-text-align">
+                        <option value="center" ${(scene.text_align || 'center') === 'center' ? 'selected' : ''}>Center</option>
+                        <option value="left" ${scene.text_align === 'left' ? 'selected' : ''}>Left</option>
+                        <option value="right" ${scene.text_align === 'right' ? 'selected' : ''}>Right</option>
+                    </select>
+                </div>
+                <div class="property-group property-half">
+                    <label>Vertical Align</label>
+                    <select class="property-select" id="prop-vertical-align">
+                        <option value="center" ${(scene.vertical_align || 'center') === 'center' ? 'selected' : ''}>Center</option>
+                        <option value="top" ${scene.vertical_align === 'top' ? 'selected' : ''}>Top</option>
+                        <option value="bottom" ${scene.vertical_align === 'bottom' ? 'selected' : ''}>Bottom</option>
+                    </select>
+                </div>
+            </div>
             <div class="property-group">
                 <label>Text Color</label>
                 <select class="property-select" id="prop-text-color">
                     <option value="white" ${(scene.text_color || 'white') === 'white' ? 'selected' : ''}>White (dark bg)</option>
                     <option value="black" ${scene.text_color === 'black' ? 'selected' : ''}>Black (light bg)</option>
                 </select>
+            </div>
+            <div class="property-group">
+                <label>Position</label>
+                <div class="property-position-info">
+                    ${scene.text_x !== undefined && scene.text_x !== null ?
+                        `<span class="position-value">X: ${Math.round(scene.text_x)}%, Y: ${Math.round(scene.text_y)}%</span>` :
+                        `<span class="position-value position-auto">Using alignment</span>`}
+                    <button class="btn btn-small btn-reset-position" id="reset-text-position"
+                            ${scene.text_x === undefined || scene.text_x === null ? 'disabled' : ''}>
+                        Reset
+                    </button>
+                </div>
+                <span class="property-hint">Drag text in preview to position</span>
             </div>
         ` : `
             <div class="property-group">
@@ -1810,8 +1880,11 @@ function renderSceneProperties() {
     const effectSelect = document.getElementById('prop-effect');
     const textContentInput = document.getElementById('prop-text-content');
     const textColorSelect = document.getElementById('prop-text-color');
-    const textSizeSelect = document.getElementById('prop-text-size');
+    const fontFamilySelect = document.getElementById('prop-font-family');
+    const textSizeInput = document.getElementById('prop-text-size');
     const fontStyleSelect = document.getElementById('prop-font-style');
+    const textAlignSelect = document.getElementById('prop-text-align');
+    const verticalAlignSelect = document.getElementById('prop-vertical-align');
 
     durationInput?.addEventListener('change', (e) => {
         const oldValue = scene.duration;
@@ -1847,12 +1920,23 @@ function renderSceneProperties() {
         }, 1000);
     });
 
-    // Text size change - update scene and refresh preview
-    textSizeSelect?.addEventListener('change', (e) => {
+    // Text size change (pixels) - update scene and refresh preview
+    textSizeInput?.addEventListener('change', (e) => {
         const oldValue = scene.text_size;
-        const newValue = e.target.value;
+        const newValue = parseInt(e.target.value) || 48;
         scene.text_size = newValue;
-        recordEdit(`Change text size (Scene ${scene.id})`, scene.id, 'text_size', oldValue, newValue);
+        recordEdit(`Change font size (Scene ${scene.id})`, scene.id, 'text_size', oldValue, newValue);
+        if (EditorState.preview) {
+            EditorState.preview.seek(EditorState.playbackPosition);
+        }
+    });
+
+    // Font family change - update scene and refresh preview
+    fontFamilySelect?.addEventListener('change', (e) => {
+        const oldValue = scene.font_family;
+        const newValue = e.target.value;
+        scene.font_family = newValue;
+        recordEdit(`Change font family (Scene ${scene.id})`, scene.id, 'font_family', oldValue, newValue);
         if (EditorState.preview) {
             EditorState.preview.seek(EditorState.playbackPosition);
         }
@@ -1869,6 +1953,28 @@ function renderSceneProperties() {
         }
     });
 
+    // Text align change - update scene and refresh preview
+    textAlignSelect?.addEventListener('change', (e) => {
+        const oldValue = scene.text_align;
+        const newValue = e.target.value;
+        scene.text_align = newValue;
+        recordEdit(`Change text align (Scene ${scene.id})`, scene.id, 'text_align', oldValue, newValue);
+        if (EditorState.preview) {
+            EditorState.preview.seek(EditorState.playbackPosition);
+        }
+    });
+
+    // Vertical align change - update scene and refresh preview
+    verticalAlignSelect?.addEventListener('change', (e) => {
+        const oldValue = scene.vertical_align;
+        const newValue = e.target.value;
+        scene.vertical_align = newValue;
+        recordEdit(`Change vertical align (Scene ${scene.id})`, scene.id, 'vertical_align', oldValue, newValue);
+        if (EditorState.preview) {
+            EditorState.preview.seek(EditorState.playbackPosition);
+        }
+    });
+
     // Text color change - update scene and refresh preview
     textColorSelect?.addEventListener('change', (e) => {
         const oldValue = scene.text_color;
@@ -1878,6 +1984,22 @@ function renderSceneProperties() {
         if (EditorState.preview) {
             EditorState.preview.seek(EditorState.playbackPosition);
         }
+    });
+
+    // Reset text position - clear custom position to use alignment
+    const resetPositionBtn = document.getElementById('reset-text-position');
+    resetPositionBtn?.addEventListener('click', () => {
+        const oldX = scene.text_x;
+        const oldY = scene.text_y;
+        scene.text_x = undefined;
+        scene.text_y = undefined;
+        recordEdit(`Reset text position (Scene ${scene.id})`, scene.id, 'text_position', { x: oldX, y: oldY }, null);
+        saveProjectEdits();
+        if (EditorState.preview) {
+            EditorState.preview.seek(EditorState.playbackPosition);
+        }
+        // Re-render properties to update position display
+        renderSceneProperties();
     });
 }
 
@@ -1972,11 +2094,13 @@ function easeOutCubic(t) {
 
 /**
  * Setup playhead drag functionality
+ * Uses the header marker trail for visual feedback
  */
 function setupPlayheadDrag() {
     const playhead = document.getElementById('timeline-playhead');
-    const playheadTrail = playhead?.querySelector('.playhead-trail');
     const timelineTracks = document.getElementById('timeline-tracks');
+    const headerMarker = elements.timelineHeaderMarker;
+    const headerTrail = elements.headerMarkerTrail;
 
     if (!playhead || !timelineTracks) return;
 
@@ -1991,30 +2115,37 @@ function setupPlayheadDrag() {
         return Math.max(0, Math.min(time, getTotalDuration()));
     };
 
-    // Update trail width based on current position vs start position
+    // Convert time position to header marker position (relative to visible area)
+    const timeToMarkerPosition = (time) => {
+        if (!headerMarker) return 0;
+        const scrollLeft = timelineTracks.scrollLeft;
+        const visibleWidth = timelineTracks.clientWidth - TRACK_BASE_OFFSET;
+        const markerWidth = headerMarker.getBoundingClientRect().width;
+        const timePixels = timeToPixels(time);
+        const visiblePixelPos = timePixels - scrollLeft;
+        return (visiblePixelPos / visibleWidth) * markerWidth;
+    };
+
+    // Update header marker trail based on drag
     const updateTrail = () => {
-        if (!playheadTrail) return;
-        const startPixels = timeToPixels(dragStartPosition);
-        const currentPixels = timeToPixels(EditorState.playbackPosition);
-        const trailWidth = Math.abs(currentPixels - startPixels);
+        if (!headerTrail || !headerMarker) return;
 
-        // Trail extends to the left (negative direction) from playhead
-        playheadTrail.style.width = `${trailWidth}px`;
+        const startMarkerPos = timeToMarkerPosition(dragStartPosition);
+        const currentMarkerPos = timeToMarkerPosition(EditorState.playbackPosition);
 
-        // Flip direction based on drag direction
-        if (currentPixels >= startPixels) {
-            // Dragging right - trail extends left from current position
-            playheadTrail.style.transform = 'scaleX(-1)';
-        } else {
-            // Dragging left - trail extends right from current position
-            playheadTrail.style.transform = 'scaleX(1)';
-        }
+        const left = Math.min(startMarkerPos, currentMarkerPos);
+        const width = Math.abs(currentMarkerPos - startMarkerPos);
+
+        headerTrail.style.left = `${Math.max(0, left)}px`;
+        headerTrail.style.width = `${width}px`;
     };
 
     // Reset trail
     const resetTrail = () => {
-        if (playheadTrail) {
-            playheadTrail.style.width = '0';
+        if (headerTrail) {
+            setTimeout(() => {
+                headerTrail.style.width = '0px';
+            }, 300);
         }
     };
 
@@ -2024,7 +2155,14 @@ function setupPlayheadDrag() {
         isDragging = true;
         dragStartPosition = EditorState.playbackPosition;
         playhead.classList.add('dragging');
-        resetTrail();
+        headerMarker?.classList.add('scrubbing');
+
+        // Initialize trail at start position
+        if (headerTrail) {
+            const startPos = timeToMarkerPosition(dragStartPosition);
+            headerTrail.style.left = `${startPos}px`;
+            headerTrail.style.width = '0px';
+        }
 
         // Pause playback while dragging
         if (EditorState.isPlaying) {
@@ -2040,7 +2178,14 @@ function setupPlayheadDrag() {
         isDragging = true;
         dragStartPosition = EditorState.playbackPosition;
         playhead.classList.add('dragging');
-        resetTrail();
+        headerMarker?.classList.add('scrubbing');
+
+        // Initialize trail at start position
+        if (headerTrail) {
+            const startPos = timeToMarkerPosition(dragStartPosition);
+            headerTrail.style.left = `${startPos}px`;
+            headerTrail.style.width = '0px';
+        }
 
         // Pause playback while dragging
         if (EditorState.isPlaying) {
@@ -2077,6 +2222,7 @@ function setupPlayheadDrag() {
         if (isDragging) {
             isDragging = false;
             playhead.classList.remove('dragging');
+            headerMarker?.classList.remove('scrubbing');
             resetTrail();
         }
     });

@@ -294,10 +294,18 @@ export class CanvasPreview {
         if (textContent) {
             this.renderTextOverlay(textContent, progress, {
                 color: textColor,
-                size: scene.text_size || 'medium',
-                style: scene.font_style || 'bold'
+                size: scene.text_size || 48,
+                style: scene.font_style || 'bold',
+                fontFamily: scene.font_family || 'Inter',
+                textAlign: scene.text_align || 'center',
+                verticalAlign: scene.vertical_align || 'center',
+                textX: scene.text_x,
+                textY: scene.text_y
             });
         }
+
+        // Store current scene for drag reference
+        this.currentTextScene = scene;
     }
 
     /**
@@ -325,7 +333,7 @@ export class CanvasPreview {
     }
 
     /**
-     * Render text overlay - centered on screen with specified options
+     * Render text overlay with specified options
      * @param {string} text - Text to render
      * @param {number} progress - Animation progress (0-1)
      * @param {object|string} options - Text options or legacy textColor string
@@ -337,8 +345,14 @@ export class CanvasPreview {
         }
 
         const textColor = options.color || 'white';
-        const textSize = options.size || 'medium';
+        const textSize = options.size || 48;
         const fontStyle = options.style || 'bold';
+        const fontFamily = options.fontFamily || 'Inter';
+        const textAlign = options.textAlign || 'center';
+        const verticalAlign = options.verticalAlign || 'center';
+        // Custom position (0-100 percentage, null means use alignment)
+        const textX = options.textX;
+        const textY = options.textY;
 
         this.ctx.save();
 
@@ -349,18 +363,24 @@ export class CanvasPreview {
 
         // Text styling based on color preference
         this.ctx.fillStyle = textColor === 'white' ? '#ffffff' : '#000000';
-        this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
 
-        // Calculate font size based on size option and canvas
-        const sizeMultipliers = {
-            small: 0.6,
-            medium: 1.0,
-            large: 1.4,
-            xlarge: 1.8
-        };
-        const sizeMultiplier = sizeMultipliers[textSize] || 1.0;
-        const baseFontSize = Math.min(48, this.height / 10) * sizeMultiplier;
+        // Calculate font size - support both pixel values and legacy string values
+        let baseFontSize;
+        if (typeof textSize === 'number') {
+            // Pixel value - scale relative to canvas (canvas is 1080x1920, scale accordingly)
+            baseFontSize = textSize * (this.height / 1920);
+        } else {
+            // Legacy string value for backward compatibility
+            const sizeMultipliers = {
+                small: 0.6,
+                medium: 1.0,
+                large: 1.4,
+                xlarge: 1.8
+            };
+            const sizeMultiplier = sizeMultipliers[textSize] || 1.0;
+            baseFontSize = Math.min(48, this.height / 10) * sizeMultiplier;
+        }
 
         // Build font string based on style
         let fontWeight = '400';  // normal
@@ -386,19 +406,71 @@ export class CanvasPreview {
                 break;
         }
 
-        const fontString = `${fontStyleStr} ${fontWeight} ${baseFontSize}px Inter, sans-serif`;
+        const fontString = `${fontStyleStr} ${fontWeight} ${baseFontSize}px "${fontFamily}", sans-serif`;
 
         // Word wrap the text
-        const maxWidth = this.width * 0.8;
+        const maxWidth = this.width * 0.9; // 90% of canvas width
         const lines = this.wrapText(text, maxWidth, baseFontSize, fontString);
         const lineHeight = baseFontSize * 1.3;
         const totalHeight = lines.length * lineHeight;
-        const startY = (this.height - totalHeight) / 2 + lineHeight / 2;
+
+        // Calculate position - use custom position if set, otherwise use alignment
+        let finalX, finalY;
+
+        if (textX !== null && textX !== undefined) {
+            // Custom position: percentage (0-100) of canvas
+            finalX = (textX / 100) * this.width;
+            this.ctx.textAlign = 'center'; // Always center-align when using custom position
+        } else {
+            // Use text alignment
+            this.ctx.textAlign = textAlign;
+            switch (textAlign) {
+                case 'left':
+                    finalX = this.width * 0.05; // 5% padding from left
+                    break;
+                case 'right':
+                    finalX = this.width * 0.95; // 5% padding from right
+                    break;
+                case 'center':
+                default:
+                    finalX = this.width / 2;
+                    break;
+            }
+        }
+
+        if (textY !== null && textY !== undefined) {
+            // Custom position: percentage (0-100) of canvas
+            finalY = (textY / 100) * this.height;
+        } else {
+            // Use vertical alignment
+            switch (verticalAlign) {
+                case 'top':
+                    finalY = lineHeight / 2 + (this.height * 0.05); // 5% padding from top
+                    break;
+                case 'bottom':
+                    finalY = this.height - totalHeight + lineHeight / 2 - (this.height * 0.05); // 5% padding from bottom
+                    break;
+                case 'center':
+                default:
+                    finalY = (this.height - totalHeight) / 2 + lineHeight / 2;
+                    break;
+            }
+        }
+
+        // Store text bounds for hit testing (used for dragging)
+        this.lastTextBounds = {
+            x: finalX,
+            y: finalY,
+            width: maxWidth,
+            height: totalHeight,
+            lines: lines,
+            lineHeight: lineHeight
+        };
 
         // Draw each line
         this.ctx.font = fontString;
         lines.forEach((line, index) => {
-            this.ctx.fillText(line, this.width / 2, startY + index * lineHeight);
+            this.ctx.fillText(line, finalX, finalY + index * lineHeight);
         });
 
         this.ctx.restore();
@@ -607,6 +679,147 @@ export class CanvasPreview {
         const g = parseInt(hex.slice(3, 5), 16);
         const b = parseInt(hex.slice(5, 7), 16);
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    /**
+     * Enable text dragging on the canvas
+     * @param {function} onPositionChange - Callback when text position changes (x, y in percentage)
+     */
+    enableTextDrag(onPositionChange) {
+        this.onTextPositionChange = onPositionChange;
+        this.isDraggingText = false;
+        this.dragStartPos = null;
+
+        // Mouse event handlers
+        this.canvas.addEventListener('mousedown', this._handleMouseDown.bind(this));
+        this.canvas.addEventListener('mousemove', this._handleMouseMove.bind(this));
+        this.canvas.addEventListener('mouseup', this._handleMouseUp.bind(this));
+        this.canvas.addEventListener('mouseleave', this._handleMouseUp.bind(this));
+
+        // Touch event handlers for mobile
+        this.canvas.addEventListener('touchstart', this._handleTouchStart.bind(this));
+        this.canvas.addEventListener('touchmove', this._handleTouchMove.bind(this));
+        this.canvas.addEventListener('touchend', this._handleTouchEnd.bind(this));
+    }
+
+    /**
+     * Get mouse position relative to canvas
+     */
+    _getCanvasPos(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        return {
+            x: (e.clientX - rect.left) * scaleX,
+            y: (e.clientY - rect.top) * scaleY
+        };
+    }
+
+    /**
+     * Check if position is within text bounds
+     */
+    _isOverText(pos) {
+        if (!this.lastTextBounds || !this.currentTextScene) return false;
+
+        const bounds = this.lastTextBounds;
+        const halfWidth = bounds.width / 2;
+        const halfHeight = bounds.height / 2;
+
+        return pos.x >= bounds.x - halfWidth &&
+               pos.x <= bounds.x + halfWidth &&
+               pos.y >= bounds.y - halfHeight &&
+               pos.y <= bounds.y + bounds.height - halfHeight;
+    }
+
+    /**
+     * Handle mouse down - start dragging if over text
+     */
+    _handleMouseDown(e) {
+        if (!this.currentTextScene) return;
+
+        const pos = this._getCanvasPos(e);
+        if (this._isOverText(pos)) {
+            this.isDraggingText = true;
+            this.dragStartPos = pos;
+            this.canvas.style.cursor = 'grabbing';
+            e.preventDefault();
+        }
+    }
+
+    /**
+     * Handle mouse move - update text position while dragging
+     */
+    _handleMouseMove(e) {
+        const pos = this._getCanvasPos(e);
+
+        if (this.isDraggingText && this.currentTextScene) {
+            // Calculate new position as percentage
+            const newX = (pos.x / this.width) * 100;
+            const newY = (pos.y / this.height) * 100;
+
+            // Clamp to canvas bounds (5% padding)
+            const clampedX = Math.max(5, Math.min(95, newX));
+            const clampedY = Math.max(5, Math.min(95, newY));
+
+            // Update scene position
+            this.currentTextScene.text_x = clampedX;
+            this.currentTextScene.text_y = clampedY;
+
+            // Re-render
+            this.render();
+
+            // Notify callback
+            if (this.onTextPositionChange) {
+                this.onTextPositionChange(clampedX, clampedY, this.currentTextScene);
+            }
+
+            e.preventDefault();
+        } else {
+            // Update cursor based on hover state
+            if (this._isOverText(pos) && this.currentTextScene) {
+                this.canvas.style.cursor = 'grab';
+            } else {
+                this.canvas.style.cursor = 'default';
+            }
+        }
+    }
+
+    /**
+     * Handle mouse up - stop dragging
+     */
+    _handleMouseUp(e) {
+        if (this.isDraggingText) {
+            this.isDraggingText = false;
+            this.dragStartPos = null;
+            this.canvas.style.cursor = this._isOverText(this._getCanvasPos(e)) ? 'grab' : 'default';
+        }
+    }
+
+    /**
+     * Handle touch start
+     */
+    _handleTouchStart(e) {
+        if (e.touches.length === 1) {
+            const touch = e.touches[0];
+            this._handleMouseDown({ clientX: touch.clientX, clientY: touch.clientY, preventDefault: () => e.preventDefault() });
+        }
+    }
+
+    /**
+     * Handle touch move
+     */
+    _handleTouchMove(e) {
+        if (e.touches.length === 1) {
+            const touch = e.touches[0];
+            this._handleMouseMove({ clientX: touch.clientX, clientY: touch.clientY, preventDefault: () => e.preventDefault() });
+        }
+    }
+
+    /**
+     * Handle touch end
+     */
+    _handleTouchEnd(e) {
+        this._handleMouseUp({ clientX: 0, clientY: 0 });
     }
 
     /**
