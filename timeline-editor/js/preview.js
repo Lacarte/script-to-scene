@@ -87,7 +87,9 @@ export class CanvasPreview {
      */
     setScenes(scenes) {
         this.scenes = scenes;
-        this.preloadImages();
+        this.preloadImages().then(() => {
+            this.render();
+        });
     }
 
     /**

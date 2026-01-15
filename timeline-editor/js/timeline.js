@@ -1,5 +1,5 @@
 import { State } from './state.js';
-import { SCENE_COLORS, VFX_ICONS, formatTimestamp, getTotalDuration } from './utils.js';
+import { SCENE_COLORS, VFX_ICONS, SCENE_TYPE_ICONS, formatTimestamp, getTotalDuration } from './utils.js';
 import { getSceneErrors, ErrorType } from './validation.js';
 
 // Format scene type for display (remove underscores, capitalize)
@@ -166,6 +166,7 @@ class TimelineRenderer {
 
             const color = SCENE_COLORS[scene.scene_type] || '#666666';
             const vfxIcon = VFX_ICONS[scene.visual_fx] || '';
+            const sceneIcon = SCENE_TYPE_ICONS[scene.scene_type] || '';
             const displayType = formatSceneType(scene.scene_type);
 
             html += `
@@ -177,7 +178,10 @@ class TimelineRenderer {
                             <span class="block-id">${scene.scene_id}</span>
                             <span class="block-type">${displayType}</span>
                         </div>
-                        ${vfxIcon ? `<span class="block-vfx" title="${scene.visual_fx}">${vfxIcon}</span>` : ''}
+                        <div class="block-icons">
+                            ${sceneIcon ? `<span class="block-scene-icon" title="${scene.scene_type}">${sceneIcon}</span>` : ''}
+                            ${vfxIcon ? `<span class="block-vfx" title="${scene.visual_fx}">${vfxIcon}</span>` : ''}
+                        </div>
                     </div>
                     <div class="block-footer">
                         <div class="block-duration">${scene.duration}s</div>

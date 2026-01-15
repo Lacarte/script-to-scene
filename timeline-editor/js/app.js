@@ -148,6 +148,12 @@ class App {
 
     async selectProject(project) {
         State.selectProject(project);
+
+        // Update visual selection in project list
+        document.querySelectorAll('.project-item').forEach(item => {
+            item.classList.toggle('selected', item.dataset.projectId === project.project_id);
+        });
+
         const timelineLoading = document.getElementById('timeline-loading');
 
         try {
@@ -200,7 +206,7 @@ class App {
                 <li class="project-item ${isSelected ? 'selected' : ''}" data-project-id="${project.project_id}">
                     <div class="project-header">
                         <div class="project-name">${project.project_id.slice(0, 20)}...</div>
-                        <button class="btn-script" title="View script">📜</button>
+                        <button class="btn-script" title="View script"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg></button>
                     </div>
                     ${scriptExcerpt ? `<div class="project-excerpt">${scriptExcerpt}</div>` : ''}
                     <div class="project-meta">
@@ -560,47 +566,90 @@ class App {
             return;
         }
 
-        // Prepare staged data
-        let imageCounter = 1;
-        const stagedData = {
-            project_id: project.project_id,
-            project_name: project.name || project.project_id,
-            total_duration: getTotalDuration(scenes),
-            scene_count: scenes.length,
-            staged_at: new Date().toISOString(),
-            scenes: scenes.map(scene => {
-                const isVisualScene = !['text', 'cta'].includes(scene.scene_type);
-                const imageFile = isVisualScene ? `image${imageCounter++}.jpg` : null;
+        // Show loading state on button
+        const stageBtn = document.getElementById('stage-timeline');
+        if (stageBtn) {
+            stageBtn.classList.add('btn-loading');
+            stageBtn.disabled = true;
+        }
 
-                return {
-                    id: scene.scene_id,
-                    type: scene.scene_type,
-                    timestamp: scene.timestamp,
-                    duration: scene.duration,
-                    description: scene.description || '',
-                    visual_fx: scene.visual_fx,
-                    style: scene.style || '',
-                    status: scene.status,
-                    ...(isVisualScene && {
-                        image: imageFile,
-                        prompt: scene.prompt || ''
-                    }),
-                    ...(!isVisualScene && {
-                        text_content: scene.text_content || '',
-                        text_bg: scene.text_bg || ''
-                    })
-                };
-            })
-        };
+        // Show full-page loading overlay
+        this.showStagingOverlay();
 
-        // Store in sessionStorage for Stage 2 to read
-        sessionStorage.setItem('staged_timeline', JSON.stringify(stagedData));
-
-        // Navigate to Stage 2 editor
-        showToast('Timeline staged! Opening video editor...', 'success');
+        // Prepare staged data (with small delay for UI feedback)
         setTimeout(() => {
-            window.location.href = 'editor.html';
-        }, 500);
+            let imageCounter = 1;
+            const stagedData = {
+                project_id: project.project_id,
+                project_name: project.name || project.project_id,
+                total_duration: getTotalDuration(scenes),
+                scene_count: scenes.length,
+                staged_at: new Date().toISOString(),
+                scenes: scenes.map(scene => {
+                    const isVisualScene = !['text', 'cta'].includes(scene.scene_type);
+                    const imageFile = isVisualScene ? `image${imageCounter++}.jpg` : null;
+
+                    return {
+                        id: scene.scene_id,
+                        type: scene.scene_type,
+                        timestamp: scene.timestamp,
+                        duration: scene.duration,
+                        description: scene.description || '',
+                        visual_fx: scene.visual_fx,
+                        style: scene.style || '',
+                        status: scene.status,
+                        ...(isVisualScene && {
+                            image: imageFile,
+                            prompt: scene.prompt || ''
+                        }),
+                        ...(!isVisualScene && {
+                            text_content: scene.text_content || '',
+                            text_bg: scene.text_bg || ''
+                        })
+                    };
+                })
+            };
+
+            // Store in sessionStorage for Stage 2 to read
+            sessionStorage.setItem('staged_timeline', JSON.stringify(stagedData));
+
+            // Update overlay message
+            this.updateStagingOverlay('Opening Video Editor...');
+
+            // Navigate to Stage 2 editor
+            setTimeout(() => {
+                window.location.href = 'editor.html';
+            }, 300);
+        }, 100);
+    }
+
+    showStagingOverlay() {
+        // Create overlay if it doesn't exist
+        let overlay = document.getElementById('staging-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'staging-overlay';
+            overlay.className = 'staging-overlay';
+            overlay.innerHTML = `
+                <div class="staging-content">
+                    <div class="staging-spinner"></div>
+                    <div class="staging-message">Preparing Timeline...</div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+        }
+
+        // Show with animation
+        requestAnimationFrame(() => {
+            overlay.classList.add('active');
+        });
+    }
+
+    updateStagingOverlay(message) {
+        const msgEl = document.querySelector('.staging-message');
+        if (msgEl) {
+            msgEl.textContent = message;
+        }
     }
 
     restoreFromBackup() {

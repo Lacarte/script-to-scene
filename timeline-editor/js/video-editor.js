@@ -10,6 +10,37 @@ import { ExportAPI, prepareExportData, validateExportData } from './export-api.j
 // Export API instance
 const exportAPI = new ExportAPI();
 
+// Scene type icons - flat outline style SVG icons
+const SCENE_ICONS = {
+    hook: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h4"/>
+    </svg>`,
+    buildup: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="4" y="14" width="4" height="6" rx="1"/><rect x="10" y="10" width="4" height="10" rx="1"/><rect x="16" y="6" width="4" height="14" rx="1"/>
+    </svg>`,
+    text: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M6 4h12M12 4v16M8 20h8"/>
+    </svg>`,
+    peak: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 4l2.5 5h5.5l-4.5 3.5 1.7 5.5-5.2-3.5-5.2 3.5 1.7-5.5L4 9h5.5z"/>
+    </svg>`,
+    transition: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>
+    </svg>`,
+    cta: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="7" width="18" height="10" rx="2"/><path d="M9 12h6M12 9v6"/>
+    </svg>`,
+    speaker: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="8" r="4"/><path d="M5 20c0-4 3.5-6 7-6s7 2 7 6"/>
+    </svg>`,
+    final_statement: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 12l3 3 5-6"/>
+    </svg>`,
+    default: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M20 16l-5-5-7 9"/>
+    </svg>`
+};
+
 // Editor State
 const EditorState = {
     project: null,
@@ -142,6 +173,9 @@ const elements = {
     previewJsonBtn: document.getElementById('preview-json'),
     exportBtn: document.getElementById('export-mp4'),
     timeRuler: document.getElementById('time-ruler'),
+    timelineResizeHandle: document.getElementById('timeline-resize-handle'),
+    editorLayout: document.querySelector('.editor-layout'),
+    timelinePanel: document.querySelector('.timeline-panel'),
     // Export progress modal
     exportProgressModal: document.getElementById('export-progress-modal'),
     exportProgressTitle: document.getElementById('export-progress-title'),
@@ -158,18 +192,28 @@ const elements = {
 function init() {
     console.log('Video Editor initializing...');
 
+    // Show initial loading state
+    showInitialLoading();
+
     // Check for staged data
     const stagedData = sessionStorage.getItem('staged_timeline');
     if (!stagedData) {
+        hideInitialLoading();
         showNoDataOverlay();
         return;
     }
 
     try {
         const data = JSON.parse(stagedData);
-        loadProject(data);
+
+        // Small delay to show loading transition
+        setTimeout(() => {
+            loadProject(data);
+            hideInitialLoading();
+        }, 300);
     } catch (error) {
         console.error('Failed to parse staged data:', error);
+        hideInitialLoading();
         showNoDataOverlay();
         return;
     }
@@ -177,7 +221,40 @@ function init() {
     // Setup event listeners
     setupEventListeners();
 
+    // Set initial clip sizes based on default timeline height
+    updateClipSizes(180);
+
     console.log('Video Editor initialized');
+}
+
+/**
+ * Show initial loading screen
+ */
+function showInitialLoading() {
+    let loader = document.getElementById('initial-loader');
+    if (!loader) {
+        loader = document.createElement('div');
+        loader.id = 'initial-loader';
+        loader.className = 'initial-loader active';
+        loader.innerHTML = `
+            <div class="initial-loader-content">
+                <div class="initial-loader-spinner"></div>
+                <div class="initial-loader-text">Loading Editor...</div>
+            </div>
+        `;
+        document.body.appendChild(loader);
+    }
+}
+
+/**
+ * Hide initial loading screen
+ */
+function hideInitialLoading() {
+    const loader = document.getElementById('initial-loader');
+    if (loader) {
+        loader.classList.remove('active');
+        setTimeout(() => loader.remove(), 300);
+    }
 }
 
 /**
@@ -320,9 +397,13 @@ async function autoLoadProjectMedia() {
         return;
     }
 
+    // Show loading overlay
+    showMediaLoadingOverlay();
+
     const basePath = `working-assets/${projectId}/`;
     const imageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
     let loadedCount = 0;
+    const totalScenes = EditorState.scenes.filter(s => s.type !== 'text').length;
 
     // Try to load image for each scene (scenes are 1-indexed in naming)
     // Skip text-type scenes - they don't need images
@@ -335,6 +416,9 @@ async function autoLoadProjectMedia() {
             console.log(`Skipping scene ${sceneNumber}: text type`);
             continue;
         }
+
+        // Update loading progress
+        updateMediaLoadingProgress(loadedCount, totalScenes, `Loading scene ${sceneNumber}...`);
 
         // Try each extension until one works
         for (const ext of imageExtensions) {
@@ -349,6 +433,10 @@ async function autoLoadProjectMedia() {
                     scene.image = `${sceneNumber}.${ext}`;
                     loadedCount++;
                     console.log(`Loaded scene ${sceneNumber}: ${imagePath}`);
+
+                    // Update timeline with newly loaded image
+                    updateSceneClipThumb(scene.id, imagePath);
+
                     break; // Found image, stop trying other extensions
                 }
             } catch (error) {
@@ -357,6 +445,9 @@ async function autoLoadProjectMedia() {
             }
         }
     }
+
+    // Hide loading overlay
+    hideMediaLoadingOverlay();
 
     // Update UI if any images were loaded
     if (loadedCount > 0) {
@@ -380,6 +471,84 @@ async function autoLoadProjectMedia() {
         showToast(`Auto-loaded ${loadedCount} scene images`, 'success');
     } else {
         showToast(`No images found in working-assets/${projectId}/`, 'info');
+    }
+}
+
+/**
+ * Show media loading overlay
+ */
+function showMediaLoadingOverlay() {
+    let overlay = document.getElementById('media-loading-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'media-loading-overlay';
+        overlay.className = 'media-loading-overlay';
+        overlay.innerHTML = `
+            <div class="media-loading-content">
+                <div class="media-loading-spinner"></div>
+                <div class="media-loading-text">Loading Images...</div>
+                <div class="media-loading-progress">
+                    <div class="media-loading-bar"></div>
+                </div>
+                <div class="media-loading-status">Preparing...</div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    requestAnimationFrame(() => {
+        overlay.classList.add('active');
+    });
+}
+
+/**
+ * Update media loading progress
+ */
+function updateMediaLoadingProgress(loaded, total, message) {
+    const bar = document.querySelector('.media-loading-bar');
+    const status = document.querySelector('.media-loading-status');
+
+    if (bar && total > 0) {
+        const percent = Math.round((loaded / total) * 100);
+        bar.style.width = `${percent}%`;
+    }
+
+    if (status && message) {
+        status.textContent = message;
+    }
+}
+
+/**
+ * Hide media loading overlay
+ */
+function hideMediaLoadingOverlay() {
+    const overlay = document.getElementById('media-loading-overlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+        setTimeout(() => overlay.remove(), 300);
+    }
+}
+
+/**
+ * Update a single scene clip thumbnail in the timeline
+ */
+function updateSceneClipThumb(sceneId, imagePath) {
+    const clip = document.querySelector(`.scene-clip[data-id="${sceneId}"]`);
+    if (clip) {
+        const thumb = clip.querySelector('.scene-clip-thumb');
+        if (thumb) {
+            // Add loading class while image loads
+            thumb.classList.add('loading');
+            const img = new Image();
+            img.onload = () => {
+                thumb.innerHTML = `<img src="${imagePath}" alt="Scene ${sceneId}">`;
+                thumb.classList.remove('loading');
+            };
+            img.onerror = () => {
+                thumb.classList.remove('loading');
+            };
+            img.src = imagePath;
+        }
     }
 }
 
@@ -595,6 +764,7 @@ function renderTimeline() {
     const clips = EditorState.scenes.map(scene => {
         const width = getScenePixelWidth(scene);
         const color = SCENE_COLORS[scene.type] || '#666666';
+        const icon = SCENE_ICONS[scene.type] || SCENE_ICONS.default;
 
         return `
             <div class="scene-clip"
@@ -605,11 +775,7 @@ function renderTimeline() {
                 <div class="scene-clip-thumb">
                     ${scene.mediaUrl
                 ? `<img src="${scene.mediaUrl}" alt="Scene ${scene.id}">`
-                : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2"/>
-                            <circle cx="8.5" cy="8.5" r="1.5"/>
-                            <path d="M21 15l-5-5L5 21"/>
-                           </svg>`
+                : icon
             }
                 </div>
                 <div class="scene-clip-info">
@@ -1079,8 +1245,70 @@ function setupEventListeners() {
         }, { passive: false });
     }
 
+    // Timeline vertical resize
+    setupTimelineResize();
+
     // Setup export modal
     setupExportModal();
+}
+
+/**
+ * Setup timeline vertical resize functionality
+ */
+function setupTimelineResize() {
+    const handle = elements.timelineResizeHandle;
+    const layout = elements.editorLayout;
+
+    if (!handle || !layout) return;
+
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 180;
+
+    handle.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        startY = e.clientY;
+        startHeight = elements.timelinePanel?.offsetHeight || 180;
+        handle.classList.add('dragging');
+        document.body.style.cursor = 'ns-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+
+        const deltaY = startY - e.clientY;
+        const newHeight = Math.max(150, Math.min(500, startHeight + deltaY));
+
+        layout.style.setProperty('--timeline-height', `${newHeight}px`);
+        updateClipSizes(newHeight);
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            handle.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+    });
+}
+
+/**
+ * Update clip and thumbnail sizes based on timeline height
+ */
+function updateClipSizes(timelineHeight) {
+    const videoTrack = elements.videoTrack;
+    if (!videoTrack) return;
+
+    // Scale clip height based on timeline height (subtract toolbar ~44px, ruler ~24px, padding)
+    const availableHeight = timelineHeight - 100;
+    const clipHeight = Math.max(40, Math.min(120, availableHeight * 0.6));
+    const thumbWidth = Math.max(36, clipHeight * 0.9);
+
+    videoTrack.style.setProperty('--clip-height', `${clipHeight}px`);
+    videoTrack.style.setProperty('--thumb-width', `${thumbWidth}px`);
 }
 
 /**

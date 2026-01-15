@@ -4,7 +4,7 @@
 .editor-layout {
     display: grid;
     grid-template-columns: 1fr 280px;
-    grid-template-rows: minmax(0, 1fr) 180px;
+    grid-template-rows: minmax(0, 1fr) var(--timeline-height, 180px);
     /* Increased timeline height and allow preview to shrink */
     height: calc(100vh - 64px);
     /* Match actual header height */
@@ -144,7 +144,7 @@
     appearance: none;
     background: var(--bg-tertiary);
     border-radius: 2px;
-    cursor: pointer;
+    cursor: ew-resize;
 }
 
 .time-scrubber::-webkit-slider-thumb {
@@ -153,12 +153,22 @@
     height: 12px;
     background: var(--accent-primary);
     border-radius: 50%;
-    cursor: pointer;
+    cursor: ew-resize;
     transition: transform 0.1s ease;
 }
 
 .time-scrubber::-webkit-slider-thumb:hover {
     transform: scale(1.2);
+    cursor: ew-resize;
+}
+
+.time-scrubber::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+    border: none;
+    cursor: ew-resize;
 }
 
 /* Timeline Panel - Bottom area like CapCut */
@@ -172,6 +182,46 @@
     flex-direction: column;
     position: relative;
     height: 100%;
+    min-height: 150px;
+    max-height: 500px;
+}
+
+/* Timeline Resize Handle */
+.timeline-resize-handle {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background: transparent;
+    cursor: ns-resize;
+    z-index: 100;
+    transition: background 0.15s ease;
+}
+
+.timeline-resize-handle:hover,
+.timeline-resize-handle.dragging {
+    background: var(--accent-primary);
+}
+
+.timeline-resize-handle::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-color);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.timeline-resize-handle:hover::before,
+.timeline-resize-handle.dragging::before {
+    opacity: 1;
+    background: var(--bg-primary);
 }
 
 .timeline-toolbar {
@@ -304,7 +354,7 @@
 /* Scene Clips */
 .scene-clip {
     position: relative;
-    height: 32px;
+    height: var(--clip-height, 56px);
     background: var(--bg-tertiary);
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-color);
@@ -312,7 +362,7 @@
     transition: all 0.15s ease;
     flex-shrink: 0;
     display: flex;
-    align-items: center;
+    align-items: stretch;
     overflow: hidden;
     box-sizing: border-box;
     /* Include border in width calculation for accurate timeline sync */
@@ -334,18 +384,20 @@
 }
 
 .scene-clip.selected {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px rgba(0, 229, 160, 0.3);
+    border: 1px dotted var(--accent-primary) !important;
+    box-shadow: 0 0 8px rgba(0, 229, 160, 0.4);
 }
 
 .scene-clip-thumb {
-    width: 32px;
+    width: var(--thumb-width, 48px);
     height: 100%;
     background: var(--bg-elevated);
     margin-left: 3px;
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 2px;
+    overflow: hidden;
 }
 
 .scene-clip-thumb img {
@@ -897,6 +949,162 @@
 
 .export-error #export-progress-percent {
     color: var(--error);
+}
+
+/* Media Loading Overlay */
+.media-loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(13, 13, 18, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.media-loading-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.media-loading-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    min-width: 280px;
+}
+
+.media-loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.media-loading-text {
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.media-loading-progress {
+    width: 100%;
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.media-loading-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--accent-primary);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.media-loading-status {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+/* Scene clip thumb loading animation */
+.scene-clip-thumb {
+    position: relative;
+    overflow: hidden;
+}
+
+.scene-clip-thumb.loading::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    animation: shimmer 1.5s infinite;
+    pointer-events: none;
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+/* Scene clip thumb image fade-in */
+.scene-clip-thumb img {
+    opacity: 0;
+    animation: fadeIn 0.3s ease forwards;
+}
+
+.scene-clip-thumb.loaded img {
+    opacity: 1;
+}
+
+@keyframes fadeIn {
+    to {
+        opacity: 1;
+    }
+}
+
+/* Initial Editor Loader */
+.initial-loader {
+    position: fixed;
+    inset: 0;
+    background: var(--bg-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.initial-loader.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.initial-loader-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+}
+
+.initial-loader-spinner {
+    width: 56px;
+    height: 56px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.initial-loader-text {
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    font-weight: 500;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* Responsive */
