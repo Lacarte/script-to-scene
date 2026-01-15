@@ -61,17 +61,15 @@
                 </div>
             </div>
             <div class="preview-controls">
-                <button id="play-btn" class="control-btn" title="Play/Pause">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <polygon points="5 3 19 12 5 21 5 3" />
+                <button id="play-btn" class="control-btn-minimal" title="Play/Pause">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="6 4 18 12 6 20 6 4" />
                     </svg>
                 </button>
-                <button id="loop-btn" class="control-btn" title="Toggle Loop">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M17 2l4 4-4 4" />
-                        <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
-                        <path d="M7 22l-4-4 4-4" />
-                        <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+                <button id="loop-btn" class="control-btn-minimal" title="Toggle Loop">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M17 4l3 3-3 3"/><path d="M4 10V9a3 3 0 013-3h13"/>
+                        <path d="M7 20l-3-3 3-3"/><path d="M20 14v1a3 3 0 01-3 3H4"/>
                     </svg>
                 </button>
                 <div class="time-display">
@@ -80,10 +78,10 @@
                     <span id="total-time">0:00</span>
                 </div>
                 <input type="range" id="time-scrubber" class="time-scrubber" min="0" max="100" value="0">
-                <button id="volume-btn" class="control-btn" title="Volume">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button id="volume-btn" class="control-btn-minimal" title="Volume">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                     </svg>
                 </button>
             </div>
@@ -123,6 +121,11 @@
                             </svg>
                         </button>
                     </div>
+                </div>
+                <div class="timeline-header-marker" id="timeline-header-marker">
+                    <div class="header-marker-track"></div>
+                    <div class="header-marker-trail"></div>
+                    <div class="header-marker-indicator"></div>
                 </div>
             </div>
 

@@ -41,6 +41,27 @@ const SCENE_ICONS = {
     </svg>`
 };
 
+// LocalStorage keys
+const STORAGE_KEYS = {
+    ZOOM_LEVEL: 'editor_zoom_level',
+    TIMELINE_HEIGHT: 'editor_timeline_height',
+    LOOP_STATE: 'editor_loop_state'
+};
+
+// Load saved settings from localStorage
+function loadSavedSettings() {
+    const savedZoom = localStorage.getItem(STORAGE_KEYS.ZOOM_LEVEL);
+    const savedLoop = localStorage.getItem(STORAGE_KEYS.LOOP_STATE);
+
+    return {
+        zoomLevel: savedZoom ? parseFloat(savedZoom) : 1,
+        isLooping: savedLoop === 'true',
+        timelineHeight: parseInt(localStorage.getItem(STORAGE_KEYS.TIMELINE_HEIGHT)) || 180
+    };
+}
+
+const savedSettings = loadSavedSettings();
+
 // Editor State
 const EditorState = {
     project: null,
@@ -50,8 +71,9 @@ const EditorState = {
     mediaFiles: new Map(),
     playbackPosition: 0,
     isPlaying: false,
-    isLooping: false,  // Loop playback mode
-    zoomLevel: 1,
+    isLooping: savedSettings.isLooping,  // Loop playback mode - restored from localStorage
+    zoomLevel: savedSettings.zoomLevel,   // Restored from localStorage
+    timelineHeight: savedSettings.timelineHeight, // Restored from localStorage
     pixelsPerSecond: 20,
     preview: null,  // CanvasPreview instance
     audio: null,    // Audio info
@@ -174,6 +196,9 @@ const elements = {
     exportBtn: document.getElementById('export-mp4'),
     timeRuler: document.getElementById('time-ruler'),
     timelineResizeHandle: document.getElementById('timeline-resize-handle'),
+    timelineHeaderMarker: document.getElementById('timeline-header-marker'),
+    headerMarkerIndicator: document.querySelector('.header-marker-indicator'),
+    headerMarkerTrail: document.querySelector('.header-marker-trail'),
     editorLayout: document.querySelector('.editor-layout'),
     timelinePanel: document.querySelector('.timeline-panel'),
     // Export progress modal
@@ -221,10 +246,30 @@ function init() {
     // Setup event listeners
     setupEventListeners();
 
-    // Set initial clip sizes based on default timeline height
-    updateClipSizes(180);
+    // Apply saved settings from localStorage
+    applySavedSettings();
 
     console.log('Video Editor initialized');
+}
+
+/**
+ * Apply saved settings from localStorage
+ */
+function applySavedSettings() {
+    // Apply saved timeline height
+    const timelineHeight = EditorState.timelineHeight;
+    if (elements.editorLayout) {
+        elements.editorLayout.style.setProperty('--timeline-height', `${timelineHeight}px`);
+    }
+    updateClipSizes(timelineHeight);
+
+    // Apply saved zoom level
+    updateZoom();
+
+    // Apply saved loop state
+    if (EditorState.isLooping && elements.loopBtn) {
+        elements.loopBtn.classList.add('active');
+    }
 }
 
 /**
@@ -1207,8 +1252,12 @@ function setupEventListeners() {
     if (elements.timelineTracks) {
         elements.timelineTracks.addEventListener('scroll', () => {
             updatePlayhead();
+            updateHeaderMarker();
         });
     }
+
+    // Timeline header marker click to seek
+    setupHeaderMarkerScrub();
 
     // Preview JSON button
     elements.previewJsonBtn?.addEventListener('click', previewJson);
@@ -1291,6 +1340,11 @@ function setupTimelineResize() {
             handle.classList.remove('dragging');
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
+
+            // Save timeline height to localStorage
+            const currentHeight = elements.timelinePanel?.offsetHeight || 180;
+            EditorState.timelineHeight = currentHeight;
+            localStorage.setItem(STORAGE_KEYS.TIMELINE_HEIGHT, currentHeight.toString());
         }
     });
 }
@@ -1309,6 +1363,124 @@ function updateClipSizes(timelineHeight) {
 
     videoTrack.style.setProperty('--clip-height', `${clipHeight}px`);
     videoTrack.style.setProperty('--thumb-width', `${thumbWidth}px`);
+}
+
+/**
+ * Setup header marker scrub functionality
+ * The header marker represents the VISIBLE portion of the timeline (what you can see)
+ */
+function setupHeaderMarkerScrub() {
+    const marker = elements.timelineHeaderMarker;
+    const trail = elements.headerMarkerTrail;
+    if (!marker) return;
+
+    let isScrubbing = false;
+    let scrubStartX = 0;
+
+    const updateTrail = (currentX, markerWidth) => {
+        if (!trail) return;
+
+        const left = Math.min(scrubStartX, currentX);
+        const width = Math.abs(currentX - scrubStartX);
+
+        trail.style.left = `${left}px`;
+        trail.style.width = `${width}px`;
+    };
+
+    const handleScrub = (e) => {
+        if (!elements.timelineTracks) return;
+
+        const rect = marker.getBoundingClientRect();
+        const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        const markerWidth = rect.width;
+
+        // Update trail
+        updateTrail(x, markerWidth);
+
+        // Get the visible timeline dimensions
+        const scrollLeft = elements.timelineTracks.scrollLeft;
+        const visibleWidth = elements.timelineTracks.clientWidth - TRACK_BASE_OFFSET;
+
+        // Map click position on marker to pixel position on visible timeline
+        const visiblePixelPos = (x / markerWidth) * visibleWidth;
+        const actualPixelPos = scrollLeft + visiblePixelPos;
+        const time = Math.max(0, Math.min(getTotalDuration(), pixelsToTime(actualPixelPos)));
+
+        // Seek to position
+        EditorState.playbackPosition = time;
+        if (EditorState.preview) {
+            EditorState.preview.seek(time);
+        }
+        seekAudio(time);
+        updateTimeScrubber();
+        updatePlayhead();
+    };
+
+    marker.addEventListener('mousedown', (e) => {
+        isScrubbing = true;
+        marker.classList.add('scrubbing');
+
+        // Record start position for trail
+        const rect = marker.getBoundingClientRect();
+        scrubStartX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+
+        // Reset trail
+        if (trail) {
+            trail.style.left = `${scrubStartX}px`;
+            trail.style.width = '0px';
+        }
+
+        handleScrub(e);
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (isScrubbing) {
+            handleScrub(e);
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isScrubbing) {
+            isScrubbing = false;
+            marker.classList.remove('scrubbing');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+
+            // Fade out trail (handled by CSS transition)
+            if (trail) {
+                setTimeout(() => {
+                    trail.style.width = '0px';
+                }, 300);
+            }
+        }
+    });
+}
+
+/**
+ * Update header marker indicator position
+ * The indicator shows where the playhead is within the VISIBLE portion of the timeline
+ */
+function updateHeaderMarker() {
+    const indicator = elements.headerMarkerIndicator;
+    const marker = elements.timelineHeaderMarker;
+    if (!indicator || !marker || !elements.timelineTracks) return;
+
+    const markerWidth = marker.offsetWidth;
+
+    // Get the visible timeline dimensions
+    const scrollLeft = elements.timelineTracks.scrollLeft;
+    const visibleWidth = elements.timelineTracks.clientWidth - TRACK_BASE_OFFSET;
+
+    // Calculate playhead position in pixels
+    const playheadPixelPos = timeToPixels(EditorState.playbackPosition);
+
+    // Map playhead position to marker position based on visible area
+    const relativePos = playheadPixelPos - scrollLeft;
+    const left = (relativePos / visibleWidth) * markerWidth;
+
+    indicator.style.left = `${Math.max(0, Math.min(markerWidth - 3, left))}px`;
 }
 
 /**
@@ -1335,6 +1507,10 @@ function togglePlayback() {
  */
 function toggleLoop() {
     EditorState.isLooping = !EditorState.isLooping;
+
+    // Save to localStorage
+    localStorage.setItem(STORAGE_KEYS.LOOP_STATE, EditorState.isLooping.toString());
+
     if (elements.loopBtn) {
         if (EditorState.isLooping) {
             elements.loopBtn.classList.add('active');
@@ -1453,12 +1629,18 @@ function updatePlayhead() {
         const left = TRACK_BASE_OFFSET + pixelPos - scrollLeft;
         playhead.style.left = `${left}px`;
     }
+
+    // Also update header marker indicator
+    updateHeaderMarker();
 }
 
 /**
  * Update zoom level - uses helper functions for precise calculation
  */
 function updateZoom() {
+    // Save to localStorage
+    localStorage.setItem(STORAGE_KEYS.ZOOM_LEVEL, EditorState.zoomLevel.toString());
+
     if (elements.zoomLevel) {
         elements.zoomLevel.textContent = `${Math.round(EditorState.zoomLevel * 100)}%`;
     }

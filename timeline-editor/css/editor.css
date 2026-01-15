@@ -129,6 +129,30 @@
     box-shadow: 0 0 8px rgba(0, 229, 160, 0.2);
 }
 
+/* Minimal control buttons - borderless, smaller */
+.control-btn-minimal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.control-btn-minimal:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.control-btn-minimal.active {
+    color: var(--accent-primary);
+}
+
 .time-display {
     font-size: 0.75rem;
     font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
@@ -232,6 +256,88 @@
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
+    position: relative;
+}
+
+/* Timeline Header Marker - clickable scrub area */
+.timeline-header-marker {
+    position: absolute;
+    bottom: 0;
+    left: 96px;
+    right: 0;
+    height: 6px;
+    cursor: pointer;
+    z-index: 5;
+    overflow: hidden;
+}
+
+.header-marker-track {
+    position: absolute;
+    inset: 0;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+}
+
+.header-marker-track:hover {
+    background: var(--bg-elevated);
+}
+
+/* Trail effect - shows scrub path */
+.header-marker-trail {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        rgba(0, 229, 160, 0.1),
+        rgba(0, 229, 160, 0.4)
+    );
+    border-radius: 3px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.timeline-header-marker.scrubbing .header-marker-trail {
+    opacity: 1;
+}
+
+/* Trail glow effect */
+.header-marker-trail::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: -2px;
+    bottom: -2px;
+    width: 8px;
+    background: radial-gradient(
+        ellipse at right,
+        rgba(0, 229, 160, 0.8),
+        transparent
+    );
+    filter: blur(2px);
+}
+
+.header-marker-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--accent-error);
+    border-radius: 3px;
+    pointer-events: none;
+    transition: left 0.05s ease;
+}
+
+.timeline-header-marker:hover .header-marker-indicator {
+    box-shadow: 0 0 6px var(--accent-error);
+}
+
+.timeline-header-marker.scrubbing .header-marker-indicator {
+    box-shadow: 0 0 10px var(--accent-error), 0 0 20px rgba(255, 68, 68, 0.4);
 }
 
 .toolbar-left,
