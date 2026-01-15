@@ -86,7 +86,8 @@ const EditorState = {
     audioElement: null,  // HTML Audio element for playback
     isMuted: false,  // Audio mute state
     editHistory: [],  // History of edits for undo
-    historyIndex: -1  // Current position in history (-1 = no history)
+    historyIndex: -1,  // Current position in history (-1 = no history)
+    sceneErrors: new Map()  // Map of sceneId -> [error messages]
 };
 
 // ============================================================
@@ -212,6 +213,10 @@ function recordEdit(action, sceneId, field, oldValue, newValue) {
 
     // Update undo button state
     updateUndoButton();
+
+    // Re-validate scenes and update error indicators
+    validateScenes();
+    applySceneErrorStyles();
 }
 
 /**
@@ -287,6 +292,10 @@ function undoEdit() {
     EditorState.historyIndex--;
     saveEditHistory();
     saveProjectEdits();
+
+    // Re-validate scenes and update error indicators
+    validateScenes();
+    applySceneErrorStyles();
     updateUndoButton();
 }
 
@@ -324,6 +333,10 @@ function redoEdit() {
 
     saveEditHistory();
     saveProjectEdits();
+
+    // Re-validate scenes and update error indicators
+    validateScenes();
+    applySceneErrorStyles();
     updateUndoButton();
 }
 
@@ -528,6 +541,166 @@ function clearProjectEdits() {
     EditorState.historyIndex = -1;
     updateUndoButton();
     showToast('Cleared saved edits', 'info');
+}
+
+// ============================================================
+// Scene Error Validation
+// ============================================================
+
+/**
+ * Validate all scenes and track errors
+ */
+function validateScenes() {
+    EditorState.sceneErrors.clear();
+
+    EditorState.scenes.forEach(scene => {
+        const errors = [];
+
+        // Check for missing media (image scenes should have media)
+        if (!['text', 'cta'].includes(scene.type)) {
+            if (!scene.mediaUrl && !scene.mediaFile) {
+                errors.push('Image not found');
+            }
+        }
+
+        // Check for text scenes without content
+        if (['text', 'cta'].includes(scene.type)) {
+            if (!scene.text_content || !scene.text_content.trim()) {
+                errors.push('Missing text content');
+            }
+        }
+
+        // Check for zero or negative duration
+        if (scene.duration <= 0) {
+            errors.push('Invalid duration');
+        }
+
+        // Check for very short duration (less than 0.5s)
+        if (scene.duration > 0 && scene.duration < 0.5) {
+            errors.push('Duration too short');
+        }
+
+        if (errors.length > 0) {
+            EditorState.sceneErrors.set(scene.id, errors);
+        }
+    });
+
+    updateErrorIndicator();
+}
+
+/**
+ * Update the error indicator in the header
+ */
+function updateErrorIndicator() {
+    const errorIndicator = document.getElementById('error-indicator');
+    const errorCount = document.getElementById('error-count');
+
+    if (!errorIndicator || !errorCount) return;
+
+    const errorTotal = EditorState.sceneErrors.size;
+
+    if (errorTotal > 0) {
+        errorIndicator.classList.remove('hidden');
+        errorCount.textContent = errorTotal;
+        errorIndicator.title = `${errorTotal} scene${errorTotal > 1 ? 's' : ''} with errors`;
+    } else {
+        errorIndicator.classList.add('hidden');
+    }
+}
+
+/**
+ * Apply error styling to scene clips in timeline
+ */
+function applySceneErrorStyles() {
+    if (!elements.videoTrack) return;
+
+    elements.videoTrack.querySelectorAll('.scene-clip').forEach(clip => {
+        const sceneId = parseInt(clip.dataset.id);
+        const errors = EditorState.sceneErrors.get(sceneId);
+
+        if (errors && errors.length > 0) {
+            clip.classList.add('has-error');
+            clip.title = `${clip.title}\n⚠ ${errors.join(', ')}`;
+        } else {
+            clip.classList.remove('has-error');
+        }
+    });
+}
+
+/**
+ * Setup error dropdown toggle and interactions
+ */
+function setupErrorDropdown() {
+    const errorIndicator = document.getElementById('error-indicator');
+    const errorDropdown = document.getElementById('error-dropdown');
+
+    if (!errorIndicator || !errorDropdown) return;
+
+    // Toggle dropdown on indicator click
+    errorIndicator.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (errorDropdown.classList.contains('show')) {
+            errorDropdown.classList.remove('show');
+        } else {
+            renderErrorList();
+            errorDropdown.classList.add('show');
+        }
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+        if (!errorDropdown.contains(e.target) && !errorIndicator.contains(e.target)) {
+            errorDropdown.classList.remove('show');
+        }
+    });
+}
+
+/**
+ * Render the error list in the dropdown
+ */
+function renderErrorList() {
+    const errorList = document.getElementById('error-list');
+    if (!errorList) return;
+
+    if (EditorState.sceneErrors.size === 0) {
+        errorList.innerHTML = '<li class="error-empty">No errors</li>';
+        return;
+    }
+
+    let html = '';
+    EditorState.sceneErrors.forEach((errors, sceneId) => {
+        const scene = EditorState.scenes.find(s => s.id === sceneId);
+        const sceneLabel = scene ? `Scene ${scene.id}` : `Scene ${sceneId}`;
+        const sceneType = scene?.type || 'unknown';
+
+        errors.forEach(error => {
+            html += `
+                <li class="error-item" data-scene-id="${sceneId}">
+                    <span class="error-item-scene">${sceneLabel}</span>
+                    <div class="error-item-info">
+                        <div class="error-item-type">${sceneType}</div>
+                        <div class="error-item-message">${error}</div>
+                    </div>
+                </li>
+            `;
+        });
+    });
+
+    errorList.innerHTML = html;
+
+    // Add click handlers to navigate to scene
+    errorList.querySelectorAll('.error-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const sceneId = parseInt(item.dataset.sceneId);
+            selectScene(sceneId);
+            const clip = elements.videoTrack?.querySelector(`.scene-clip[data-id="${sceneId}"]`);
+            if (clip) {
+                clip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            }
+            // Close dropdown after selection
+            document.getElementById('error-dropdown')?.classList.remove('show');
+        });
+    });
 }
 
 // ============================================================
@@ -1340,6 +1513,10 @@ function renderTimeline() {
 
     // Add resize listeners
     setupResizeHandlers();
+
+    // Validate and show errors
+    validateScenes();
+    applySceneErrorStyles();
 }
 
 /**
@@ -1406,6 +1583,11 @@ function startResize(sceneId, handle, startEvent) {
     const onMouseUp = () => {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
+
+        // Record the edit if duration actually changed
+        if (scene.duration !== startDuration) {
+            recordEdit(`Resize duration (Scene ${sceneId})`, sceneId, 'duration', startDuration, scene.duration);
+        }
 
         // Recalculate total duration
         recalculateDuration();
@@ -1822,6 +2004,9 @@ function setupEventListeners() {
 
     // History dropdown
     setupHistoryDropdown();
+
+    // Error dropdown
+    setupErrorDropdown();
 
     // Keyboard shortcuts for undo/redo
     document.addEventListener('keydown', (e) => {

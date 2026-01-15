@@ -28,14 +28,14 @@
             <div class="history-controls">
                 <button id="undo-btn" class="btn btn-icon" title="Undo (Ctrl+Z)" disabled>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M3 7v6h6"></path>
-                        <path d="M3 13a9 9 0 1 0 2.5-6.3L3 7"></path>
+                        <polyline points="1 4 1 10 7 10"></polyline>
+                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
                     </svg>
                 </button>
                 <button id="redo-btn" class="btn btn-icon" title="Redo (Ctrl+Y)" disabled>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 7v6h-6"></path>
-                        <path d="M21 13a9 9 0 1 1-2.5-6.3L21 7"></path>
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"></path>
                     </svg>
                 </button>
                 <div class="history-dropdown-container">
@@ -61,6 +61,20 @@
                             <li class="history-empty">No history yet</li>
                         </ul>
                     </div>
+                </div>
+            </div>
+            <div class="error-dropdown-container">
+                <div id="error-indicator" class="error-indicator hidden" title="Scenes with errors">
+                    <span class="error-dot"></span>
+                    <span id="error-count" class="error-count">0</span>
+                </div>
+                <div id="error-dropdown" class="error-dropdown">
+                    <div class="error-dropdown-header">
+                        <span>Scene Errors</span>
+                    </div>
+                    <ul id="error-list" class="error-list">
+                        <li class="error-empty">No errors</li>
+                    </ul>
                 </div>
             </div>
             <button id="preview-json" class="btn btn-secondary" title="Preview Export JSON">

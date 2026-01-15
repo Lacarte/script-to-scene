@@ -618,6 +618,177 @@
     color: white;
 }
 
+/* Error Indicator & Dropdown */
+.error-dropdown-container {
+    position: relative;
+}
+
+.error-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid var(--status-error);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.error-indicator:hover {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+.error-indicator.hidden {
+    display: none;
+}
+
+.error-indicator.hidden + .error-dropdown {
+    display: none !important;
+}
+
+.error-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--status-error);
+    border-radius: 50%;
+    animation: errorPulse 2s ease-in-out infinite;
+}
+
+@keyframes errorPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.9); }
+}
+
+.error-count {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--status-error);
+}
+
+.error-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 300px;
+    max-height: 320px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--status-error);
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 24px rgba(239, 68, 68, 0.2);
+    z-index: 1000;
+    display: none;
+    overflow: hidden;
+}
+
+.error-dropdown.show {
+    display: block;
+    animation: dropdownFadeIn 0.15s ease;
+}
+
+.error-dropdown-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: rgba(239, 68, 68, 0.1);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--status-error);
+}
+
+.error-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.error-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.error-list::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.error-empty {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.error-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.error-item:last-child {
+    border-bottom: none;
+}
+
+.error-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.error-item-scene {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 50px;
+    height: 24px;
+    padding: 0 8px;
+    background: var(--status-error);
+    border-radius: var(--radius-sm);
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: white;
+}
+
+.error-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.error-item-type {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+
+.error-item-message {
+    font-size: 0.75rem;
+    color: var(--text-primary);
+}
+
+/* Scene Error Dot */
+.scene-clip.has-error::after {
+    content: '';
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    background: var(--status-error);
+    border-radius: 50%;
+    box-shadow: 0 0 6px var(--status-error);
+    animation: errorPulse 2s ease-in-out infinite;
+}
+
+.scene-clip.has-error {
+    border-color: var(--status-error) !important;
+}
+
 .media-status {
     font-size: 0.7rem;
     color: var(--text-muted);
