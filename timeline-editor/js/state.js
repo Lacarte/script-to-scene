@@ -40,8 +40,21 @@ class StateManager {
             this._pushHistory(prevState.scenes);
         }
 
+        // Auto-save to localStorage when scenes change
+        if (updates.scenes) {
+            this._autoSave();
+        }
+
         // Notify all listeners
         this._notify(Object.keys(updates));
+    }
+
+    // Auto-save scenes to localStorage
+    _autoSave() {
+        const projectId = this.store.currentProject?.project_id;
+        if (projectId && this.store.scenes.length) {
+            Storage.save(`timeline_scenes_${projectId}`, this.store.scenes);
+        }
     }
 
     // Subscribe to state changes
@@ -75,6 +88,9 @@ class StateManager {
         } else {
             this.store.historyIndex++;
         }
+
+        // Notify listeners that history changed
+        this._notify(['history', 'historyIndex']);
     }
 
     undo() {
@@ -82,6 +98,7 @@ class StateManager {
             this.store.historyIndex--;
             const scenes = deepClone(this.store.history[this.store.historyIndex]);
             this.set({ scenes, _skipTimestampCalc: false }, true);
+            this._notify(['historyIndex']);
             return true;
         }
         return false;
@@ -92,6 +109,7 @@ class StateManager {
             this.store.historyIndex++;
             const scenes = deepClone(this.store.history[this.store.historyIndex]);
             this.set({ scenes, _skipTimestampCalc: false }, true);
+            this._notify(['historyIndex']);
             return true;
         }
         return false;
@@ -103,6 +121,46 @@ class StateManager {
 
     canRedo() {
         return this.store.historyIndex < this.store.history.length - 1;
+    }
+
+    // Jump to a specific history state
+    jumpToHistory(index) {
+        if (index >= 0 && index < this.store.history.length) {
+            this.store.historyIndex = index;
+            const scenes = deepClone(this.store.history[index]);
+            this.set({ scenes, _skipTimestampCalc: false }, true);
+            this._notify(['historyIndex']);
+            return true;
+        }
+        return false;
+    }
+
+    // Delete a specific history state
+    deleteHistoryAt(index) {
+        // Can't delete index 0 (initial state) or if only one item
+        if (index <= 0 || index >= this.store.history.length) return false;
+
+        // Remove the history entry
+        this.store.history.splice(index, 1);
+
+        // Adjust historyIndex if needed
+        if (this.store.historyIndex >= index) {
+            this.store.historyIndex = Math.max(0, this.store.historyIndex - 1);
+        }
+
+        // If we deleted current state, load the new current state
+        const scenes = deepClone(this.store.history[this.store.historyIndex]);
+        this.set({ scenes, _skipTimestampCalc: false }, true);
+        this._notify(['history', 'historyIndex']);
+        return true;
+    }
+
+    // Clear all history except current state
+    clearHistory() {
+        const currentScenes = deepClone(this.store.scenes);
+        this.store.history = [currentScenes];
+        this.store.historyIndex = 0;
+        this._notify(['history', 'historyIndex']);
     }
 
     // Project operations
@@ -126,11 +184,31 @@ class StateManager {
     }
 
     // Scene operations
-    setScenes(scenes) {
-        const calculated = calculateTimestamps(scenes);
+    setScenes(scenes, skipLocalStorage = false) {
+        // Check for saved scenes in localStorage first (unless skipLocalStorage)
+        const projectId = this.store.currentProject?.project_id;
+        let scenesToUse = scenes;
+
+        if (!skipLocalStorage && projectId) {
+            const savedScenes = Storage.load(`timeline_scenes_${projectId}`);
+            if (savedScenes && savedScenes.length) {
+                scenesToUse = savedScenes;
+                console.log(`Loaded ${savedScenes.length} saved scenes from localStorage`);
+            }
+        }
+
+        const calculated = calculateTimestamps(scenesToUse);
         this.store.history = [deepClone(calculated)];
         this.store.historyIndex = 0;
         this.set({ scenes: calculated, _skipTimestampCalc: true }, true);
+    }
+
+    // Clear saved scenes for a project
+    clearSavedScenes() {
+        const projectId = this.store.currentProject?.project_id;
+        if (projectId) {
+            Storage.remove(`timeline_scenes_${projectId}`);
+        }
     }
 
     selectScene(scene) {

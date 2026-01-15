@@ -28,6 +28,7 @@ class App {
         // Subscribe to state changes for UI updates
         State.subscribe(['syncStatus', 'lastSyncedAt'], () => this.updateSyncStatus());
         State.subscribe(['scenes'], () => this.runValidation());
+        State.subscribe(['scenes', 'history', 'historyIndex'], () => this.updateUndoRedoButtons());
         State.subscribe(['projects'], () => this.renderProjectList());
 
         // Set up sidebar toggle
@@ -44,6 +45,9 @@ class App {
 
         // Set up stage button
         this.setupStageButton();
+
+        // Set up undo/redo buttons
+        this.setupUndoRedoButtons();
 
         // Load projects
         await this.loadProjects();
@@ -658,6 +662,205 @@ class App {
             this.runValidation();
         } else {
             showToast('No backup found', 'warning');
+        }
+    }
+
+    setupUndoRedoButtons() {
+        const undoBtn = document.getElementById('undo-btn');
+        const redoBtn = document.getElementById('redo-btn');
+
+        if (undoBtn) {
+            undoBtn.addEventListener('click', () => {
+                if (State.undo()) {
+                    showToast('Undo', 'info');
+                }
+            });
+        }
+
+        if (redoBtn) {
+            redoBtn.addEventListener('click', () => {
+                if (State.redo()) {
+                    showToast('Redo', 'info');
+                }
+            });
+        }
+
+        // Setup history dropdown
+        this.setupHistoryDropdown();
+
+        // Initial state update
+        this.updateUndoRedoButtons();
+    }
+
+    setupHistoryDropdown() {
+        const historyBtn = document.getElementById('history-btn');
+        const historyDropdown = document.getElementById('history-dropdown');
+        const clearHistoryBtn = document.getElementById('clear-history-btn');
+
+        if (!historyBtn || !historyDropdown) return;
+
+        // Toggle dropdown
+        historyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = historyDropdown.classList.contains('show');
+            if (isOpen) {
+                historyDropdown.classList.remove('show');
+            } else {
+                this.renderHistoryList();
+                historyDropdown.classList.add('show');
+            }
+        });
+
+        // Close on outside click
+        document.addEventListener('click', (e) => {
+            if (!historyDropdown.contains(e.target) && !historyBtn.contains(e.target)) {
+                historyDropdown.classList.remove('show');
+            }
+        });
+
+        // Clear all history
+        if (clearHistoryBtn) {
+            clearHistoryBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (confirm('Clear all edit history? This cannot be undone.')) {
+                    State.clearHistory();
+                    this.renderHistoryList();
+                    showToast('History cleared', 'info');
+                }
+            });
+        }
+    }
+
+    renderHistoryList() {
+        const historyList = document.getElementById('history-list');
+        if (!historyList) return;
+
+        const history = State.get('history');
+        const historyIndex = State.get('historyIndex');
+
+        if (!history || history.length <= 1) {
+            historyList.innerHTML = '<li class="history-empty">No history yet</li>';
+            return;
+        }
+
+        // Render history items (most recent first, skip index 0 which is initial state)
+        historyList.innerHTML = history.map((scenes, index) => {
+            if (index === 0) {
+                return `
+                    <li class="history-item ${index === historyIndex ? 'current' : ''}" data-index="${index}">
+                        <span class="history-item-index">${index}</span>
+                        <div class="history-item-info">
+                            <div class="history-item-label">Initial state</div>
+                            <div class="history-item-meta">${scenes.length} scenes</div>
+                        </div>
+                    </li>
+                `;
+            }
+
+            // Try to describe what changed
+            const prevScenes = history[index - 1];
+            const changeDesc = this.describeHistoryChange(prevScenes, scenes);
+
+            return `
+                <li class="history-item ${index === historyIndex ? 'current' : ''}" data-index="${index}">
+                    <span class="history-item-index">${index}</span>
+                    <div class="history-item-info">
+                        <div class="history-item-label">${changeDesc}</div>
+                        <div class="history-item-meta">${scenes.length} scenes</div>
+                    </div>
+                    <button class="history-item-delete" data-index="${index}" title="Delete this state">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 6L6 18"></path>
+                            <path d="M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </li>
+            `;
+        }).reverse().join('');
+
+        // Add click handlers for jumping to history state
+        historyList.querySelectorAll('.history-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                if (e.target.closest('.history-item-delete')) return;
+                const index = parseInt(item.dataset.index);
+                State.jumpToHistory(index);
+                this.renderHistoryList();
+                showToast(`Jumped to state ${index}`, 'info');
+            });
+        });
+
+        // Add click handlers for delete buttons
+        historyList.querySelectorAll('.history-item-delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const index = parseInt(btn.dataset.index);
+                State.deleteHistoryAt(index);
+                this.renderHistoryList();
+                showToast('State removed', 'info');
+            });
+        });
+    }
+
+    describeHistoryChange(prevScenes, currentScenes) {
+        if (!prevScenes || !currentScenes) return 'Unknown change';
+
+        // Check for scene count change
+        if (prevScenes.length !== currentScenes.length) {
+            if (currentScenes.length > prevScenes.length) {
+                return `Added scene`;
+            } else {
+                return `Removed scene`;
+            }
+        }
+
+        // Find what changed
+        for (let i = 0; i < currentScenes.length; i++) {
+            const prev = prevScenes[i];
+            const curr = currentScenes[i];
+
+            if (!prev || !curr) continue;
+
+            if (prev.duration !== curr.duration) {
+                return `Scene ${curr.scene_id}: duration → ${curr.duration}s`;
+            }
+            if (prev.scene_type !== curr.scene_type) {
+                return `Scene ${curr.scene_id}: type → ${curr.scene_type}`;
+            }
+            if (prev.visual_fx !== curr.visual_fx) {
+                return `Scene ${curr.scene_id}: effect → ${curr.visual_fx}`;
+            }
+            if (prev.text_content !== curr.text_content) {
+                return `Scene ${curr.scene_id}: text changed`;
+            }
+            if (prev.status !== curr.status) {
+                return `Scene ${curr.scene_id}: status → ${curr.status}`;
+            }
+            if (prev.prompt !== curr.prompt) {
+                return `Scene ${curr.scene_id}: prompt changed`;
+            }
+        }
+
+        return 'Scene modified';
+    }
+
+    updateUndoRedoButtons() {
+        const undoBtn = document.getElementById('undo-btn');
+        const redoBtn = document.getElementById('redo-btn');
+        const historyBadge = document.getElementById('history-badge');
+
+        if (undoBtn) {
+            undoBtn.disabled = !State.canUndo();
+        }
+
+        if (redoBtn) {
+            redoBtn.disabled = !State.canRedo();
+        }
+
+        // Update history badge
+        if (historyBadge) {
+            const historyIndex = State.get('historyIndex');
+            historyBadge.textContent = historyIndex;
+            historyBadge.classList.toggle('has-history', historyIndex > 0);
         }
     }
 }

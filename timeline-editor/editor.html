@@ -25,6 +25,44 @@
             <span class="project-name" id="project-name">No project loaded</span>
         </div>
         <div class="header-right">
+            <div class="history-controls">
+                <button id="undo-btn" class="btn btn-icon" title="Undo (Ctrl+Z)" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 7v6h6"></path>
+                        <path d="M3 13a9 9 0 1 0 2.5-6.3L3 7"></path>
+                    </svg>
+                </button>
+                <button id="redo-btn" class="btn btn-icon" title="Redo (Ctrl+Y)" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 7v6h-6"></path>
+                        <path d="M21 13a9 9 0 1 1-2.5-6.3L21 7"></path>
+                    </svg>
+                </button>
+                <div class="history-dropdown-container">
+                    <button id="history-btn" class="btn btn-icon history-toggle" title="View History">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        <span id="history-badge" class="history-badge">0</span>
+                    </button>
+                    <div id="history-dropdown" class="history-dropdown">
+                        <div class="history-dropdown-header">
+                            <span>Edit History</span>
+                            <button id="clear-history-btn" class="btn-clear-history" title="Clear all history">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M3 6h18"></path>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <ul id="history-list" class="history-list">
+                            <li class="history-empty">No history yet</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
             <button id="preview-json" class="btn btn-secondary" title="Preview Export JSON">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>

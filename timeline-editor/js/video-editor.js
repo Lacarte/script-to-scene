@@ -45,8 +45,13 @@ const SCENE_ICONS = {
 const STORAGE_KEYS = {
     ZOOM_LEVEL: 'editor_zoom_level',
     TIMELINE_HEIGHT: 'editor_timeline_height',
-    LOOP_STATE: 'editor_loop_state'
+    LOOP_STATE: 'editor_loop_state',
+    PROJECT_EDITS: 'project_edits_',  // + projectId
+    PROJECT_HISTORY: 'project_history_'  // + projectId
 };
+
+// Maximum history entries per project
+const MAX_HISTORY_ENTRIES = 50;
 
 // Load saved settings from localStorage
 function loadSavedSettings() {
@@ -66,6 +71,7 @@ const savedSettings = loadSavedSettings();
 const EditorState = {
     project: null,
     scenes: [],
+    originalScenes: [],  // Original scenes for comparison/reset
     selectedScene: null,
     mediaFolder: null,
     mediaFiles: new Map(),
@@ -78,8 +84,451 @@ const EditorState = {
     preview: null,  // CanvasPreview instance
     audio: null,    // Audio info
     audioElement: null,  // HTML Audio element for playback
-    isMuted: false  // Audio mute state
+    isMuted: false,  // Audio mute state
+    editHistory: [],  // History of edits for undo
+    historyIndex: -1  // Current position in history (-1 = no history)
 };
+
+// ============================================================
+// Edit History & Persistence System
+// ============================================================
+
+/**
+ * Get localStorage key for project edits
+ */
+function getProjectEditsKey(projectId) {
+    return STORAGE_KEYS.PROJECT_EDITS + projectId;
+}
+
+/**
+ * Get localStorage key for project history
+ */
+function getProjectHistoryKey(projectId) {
+    return STORAGE_KEYS.PROJECT_HISTORY + projectId;
+}
+
+/**
+ * Save current scene edits to localStorage
+ */
+function saveProjectEdits() {
+    if (!EditorState.project?.id) return;
+
+    const edits = EditorState.scenes.map(scene => ({
+        id: scene.id,
+        duration: scene.duration,
+        visual_fx: scene.visual_fx,
+        text_content: scene.text_content,
+        text_color: scene.text_color,
+        text_size: scene.text_size,
+        font_style: scene.font_style
+    }));
+
+    const data = {
+        projectId: EditorState.project.id,
+        savedAt: new Date().toISOString(),
+        edits: edits
+    };
+
+    try {
+        localStorage.setItem(getProjectEditsKey(EditorState.project.id), JSON.stringify(data));
+        console.log('Project edits saved to localStorage');
+    } catch (e) {
+        console.warn('Failed to save project edits:', e);
+    }
+}
+
+/**
+ * Load saved edits from localStorage and apply to scenes
+ */
+function loadProjectEdits() {
+    if (!EditorState.project?.id) return false;
+
+    try {
+        const saved = localStorage.getItem(getProjectEditsKey(EditorState.project.id));
+        if (!saved) return false;
+
+        const data = JSON.parse(saved);
+        if (data.projectId !== EditorState.project.id) return false;
+
+        // Apply saved edits to scenes
+        let appliedCount = 0;
+        for (const edit of data.edits) {
+            const scene = EditorState.scenes.find(s => s.id === edit.id);
+            if (scene) {
+                if (edit.duration !== undefined) scene.duration = edit.duration;
+                if (edit.visual_fx !== undefined) scene.visual_fx = edit.visual_fx;
+                if (edit.text_content !== undefined) scene.text_content = edit.text_content;
+                if (edit.text_color !== undefined) scene.text_color = edit.text_color;
+                if (edit.text_size !== undefined) scene.text_size = edit.text_size;
+                if (edit.font_style !== undefined) scene.font_style = edit.font_style;
+                appliedCount++;
+            }
+        }
+
+        if (appliedCount > 0) {
+            console.log(`Loaded ${appliedCount} saved edits from localStorage`);
+            showToast(`Restored ${appliedCount} saved edits`, 'info');
+            return true;
+        }
+    } catch (e) {
+        console.warn('Failed to load project edits:', e);
+    }
+    return false;
+}
+
+/**
+ * Record an edit action to history
+ */
+function recordEdit(action, sceneId, field, oldValue, newValue) {
+    if (!EditorState.project?.id) return;
+
+    const historyEntry = {
+        timestamp: Date.now(),
+        action: action,
+        sceneId: sceneId,
+        field: field,
+        oldValue: oldValue,
+        newValue: newValue
+    };
+
+    // If we're not at the end of history, truncate future entries
+    if (EditorState.historyIndex < EditorState.editHistory.length - 1) {
+        EditorState.editHistory = EditorState.editHistory.slice(0, EditorState.historyIndex + 1);
+    }
+
+    // Add new entry
+    EditorState.editHistory.push(historyEntry);
+    EditorState.historyIndex = EditorState.editHistory.length - 1;
+
+    // Limit history size
+    if (EditorState.editHistory.length > MAX_HISTORY_ENTRIES) {
+        EditorState.editHistory.shift();
+        EditorState.historyIndex--;
+    }
+
+    // Save to localStorage
+    saveEditHistory();
+    saveProjectEdits();
+
+    // Update undo button state
+    updateUndoButton();
+}
+
+/**
+ * Save edit history to localStorage
+ */
+function saveEditHistory() {
+    if (!EditorState.project?.id) return;
+
+    try {
+        const data = {
+            projectId: EditorState.project.id,
+            history: EditorState.editHistory,
+            historyIndex: EditorState.historyIndex
+        };
+        localStorage.setItem(getProjectHistoryKey(EditorState.project.id), JSON.stringify(data));
+    } catch (e) {
+        console.warn('Failed to save edit history:', e);
+    }
+}
+
+/**
+ * Load edit history from localStorage
+ */
+function loadEditHistory() {
+    if (!EditorState.project?.id) return;
+
+    try {
+        const saved = localStorage.getItem(getProjectHistoryKey(EditorState.project.id));
+        if (!saved) return;
+
+        const data = JSON.parse(saved);
+        if (data.projectId === EditorState.project.id) {
+            EditorState.editHistory = data.history || [];
+            EditorState.historyIndex = data.historyIndex ?? -1;
+            updateUndoButton();
+        }
+    } catch (e) {
+        console.warn('Failed to load edit history:', e);
+    }
+}
+
+/**
+ * Undo the last edit
+ */
+function undoEdit() {
+    if (EditorState.historyIndex < 0 || EditorState.editHistory.length === 0) {
+        showToast('Nothing to undo', 'info');
+        return;
+    }
+
+    const entry = EditorState.editHistory[EditorState.historyIndex];
+    const scene = EditorState.scenes.find(s => s.id === entry.sceneId);
+
+    if (scene && entry.field) {
+        // Revert the change
+        scene[entry.field] = entry.oldValue;
+
+        // Update UI
+        if (entry.field === 'duration') {
+            recalculateDuration();
+            renderTimeline();
+        }
+        if (EditorState.selectedScene?.id === entry.sceneId) {
+            renderSceneProperties();
+        }
+        if (EditorState.preview) {
+            EditorState.preview.seek(EditorState.playbackPosition);
+        }
+
+        showToast(`Undo: ${entry.action}`, 'info');
+    }
+
+    EditorState.historyIndex--;
+    saveEditHistory();
+    saveProjectEdits();
+    updateUndoButton();
+}
+
+/**
+ * Redo the last undone edit
+ */
+function redoEdit() {
+    if (EditorState.historyIndex >= EditorState.editHistory.length - 1) {
+        showToast('Nothing to redo', 'info');
+        return;
+    }
+
+    EditorState.historyIndex++;
+    const entry = EditorState.editHistory[EditorState.historyIndex];
+    const scene = EditorState.scenes.find(s => s.id === entry.sceneId);
+
+    if (scene && entry.field) {
+        // Apply the change again
+        scene[entry.field] = entry.newValue;
+
+        // Update UI
+        if (entry.field === 'duration') {
+            recalculateDuration();
+            renderTimeline();
+        }
+        if (EditorState.selectedScene?.id === entry.sceneId) {
+            renderSceneProperties();
+        }
+        if (EditorState.preview) {
+            EditorState.preview.seek(EditorState.playbackPosition);
+        }
+
+        showToast(`Redo: ${entry.action}`, 'info');
+    }
+
+    saveEditHistory();
+    saveProjectEdits();
+    updateUndoButton();
+}
+
+/**
+ * Update undo/redo button states
+ */
+function updateUndoButton() {
+    const undoBtn = document.getElementById('undo-btn');
+    const redoBtn = document.getElementById('redo-btn');
+    const historyBadge = document.getElementById('history-badge');
+
+    if (undoBtn) {
+        undoBtn.disabled = EditorState.historyIndex < 0;
+        undoBtn.title = EditorState.historyIndex >= 0
+            ? `Undo: ${EditorState.editHistory[EditorState.historyIndex]?.action || ''}`
+            : 'Nothing to undo';
+    }
+
+    if (redoBtn) {
+        redoBtn.disabled = EditorState.historyIndex >= EditorState.editHistory.length - 1;
+        redoBtn.title = EditorState.historyIndex < EditorState.editHistory.length - 1
+            ? `Redo: ${EditorState.editHistory[EditorState.historyIndex + 1]?.action || ''}`
+            : 'Nothing to redo';
+    }
+
+    // Update history badge
+    if (historyBadge) {
+        const count = EditorState.historyIndex + 1;
+        historyBadge.textContent = count;
+        historyBadge.classList.toggle('has-history', count > 0);
+    }
+}
+
+/**
+ * Setup history dropdown functionality
+ */
+function setupHistoryDropdown() {
+    const historyBtn = document.getElementById('history-btn');
+    const historyDropdown = document.getElementById('history-dropdown');
+    const clearHistoryBtn = document.getElementById('clear-history-btn');
+
+    if (!historyBtn || !historyDropdown) return;
+
+    // Toggle dropdown
+    historyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = historyDropdown.classList.contains('show');
+        if (isOpen) {
+            historyDropdown.classList.remove('show');
+        } else {
+            renderHistoryList();
+            historyDropdown.classList.add('show');
+        }
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+        if (!historyDropdown.contains(e.target) && !historyBtn.contains(e.target)) {
+            historyDropdown.classList.remove('show');
+        }
+    });
+
+    // Clear all history
+    if (clearHistoryBtn) {
+        clearHistoryBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (confirm('Clear all edit history? This cannot be undone.')) {
+                clearProjectEdits();
+                renderHistoryList();
+            }
+        });
+    }
+}
+
+/**
+ * Render the history list in the dropdown
+ */
+function renderHistoryList() {
+    const historyList = document.getElementById('history-list');
+    if (!historyList) return;
+
+    const history = EditorState.editHistory;
+    const historyIndex = EditorState.historyIndex;
+
+    if (!history || history.length === 0) {
+        historyList.innerHTML = '<li class="history-empty">No history yet</li>';
+        return;
+    }
+
+    // Render history items (most recent first)
+    historyList.innerHTML = history.map((entry, index) => {
+        const isCurrent = index === historyIndex;
+        const label = entry.action || 'Unknown change';
+        const meta = entry.sceneId ? `Scene ${entry.sceneId}` : 'Project';
+
+        return `
+            <li class="history-item ${isCurrent ? 'current' : ''}" data-index="${index}">
+                <span class="history-item-index">${index + 1}</span>
+                <div class="history-item-info">
+                    <div class="history-item-label">${label}</div>
+                    <div class="history-item-meta">${meta}</div>
+                </div>
+                <button class="history-item-delete" data-index="${index}" title="Delete this state">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18"></path>
+                        <path d="M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </li>
+        `;
+    }).reverse().join('');
+
+    // Add click handlers for jumping to history state
+    historyList.querySelectorAll('.history-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            if (e.target.closest('.history-item-delete')) return;
+            const index = parseInt(item.dataset.index);
+            jumpToHistoryState(index);
+            renderHistoryList();
+        });
+    });
+
+    // Add click handlers for delete buttons
+    historyList.querySelectorAll('.history-item-delete').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const index = parseInt(btn.dataset.index);
+            deleteHistoryAt(index);
+            renderHistoryList();
+        });
+    });
+}
+
+/**
+ * Jump to a specific history state
+ */
+function jumpToHistoryState(targetIndex) {
+    if (targetIndex < 0 || targetIndex >= EditorState.editHistory.length) return;
+
+    // Apply all states from current to target
+    if (targetIndex < EditorState.historyIndex) {
+        // Going back - undo from current to target
+        while (EditorState.historyIndex > targetIndex) {
+            const entry = EditorState.editHistory[EditorState.historyIndex];
+            applyHistoryEntry(entry, true); // true = undo (use oldValue)
+            EditorState.historyIndex--;
+        }
+    } else if (targetIndex > EditorState.historyIndex) {
+        // Going forward - redo from current to target
+        while (EditorState.historyIndex < targetIndex) {
+            EditorState.historyIndex++;
+            const entry = EditorState.editHistory[EditorState.historyIndex];
+            applyHistoryEntry(entry, false); // false = redo (use newValue)
+        }
+    }
+
+    saveEditHistory();
+    updateUndoButton();
+    renderTimeline();
+    showToast(`Jumped to state ${targetIndex + 1}`, 'info');
+}
+
+/**
+ * Apply a history entry (for undo/redo operations)
+ */
+function applyHistoryEntry(entry, isUndo) {
+    const scene = EditorState.scenes.find(s => s.id === entry.sceneId);
+    if (!scene) return;
+
+    const value = isUndo ? entry.oldValue : entry.newValue;
+    scene[entry.field] = value;
+}
+
+/**
+ * Delete a specific history entry
+ */
+function deleteHistoryAt(index) {
+    if (index < 0 || index >= EditorState.editHistory.length) return;
+
+    // Remove the entry
+    EditorState.editHistory.splice(index, 1);
+
+    // Adjust historyIndex if needed
+    if (EditorState.historyIndex >= index) {
+        EditorState.historyIndex = Math.max(-1, EditorState.historyIndex - 1);
+    }
+
+    saveEditHistory();
+    updateUndoButton();
+    showToast('History entry removed', 'info');
+}
+
+/**
+ * Clear all saved edits for current project
+ */
+function clearProjectEdits() {
+    if (!EditorState.project?.id) return;
+
+    localStorage.removeItem(getProjectEditsKey(EditorState.project.id));
+    localStorage.removeItem(getProjectHistoryKey(EditorState.project.id));
+    EditorState.editHistory = [];
+    EditorState.historyIndex = -1;
+    updateUndoButton();
+    showToast('Cleared saved edits', 'info');
+}
 
 // ============================================================
 // Timeline Calculation Helpers - Single Source of Truth
@@ -336,6 +785,15 @@ function loadProject(data) {
         mediaUrl: null
     }));
 
+    // Store original scenes for reset functionality
+    EditorState.originalScenes = JSON.parse(JSON.stringify(EditorState.scenes));
+
+    // Load saved edits from localStorage (if any)
+    loadProjectEdits();
+
+    // Load edit history from localStorage
+    loadEditHistory();
+
     // Initialize Canvas Preview
     if (elements.previewCanvas) {
         EditorState.preview = new CanvasPreview(elements.previewCanvas, {
@@ -467,55 +925,89 @@ async function autoLoadProjectMedia() {
         // Update loading progress
         updateMediaLoadingProgress(loadedCount, totalScenes, `Loading scene ${sceneNumber}...`);
 
-        // Try each extension until one works
-        for (const ext of imageExtensions) {
-            const imagePath = `${basePath}${sceneNumber}.${ext}`;
+        // Build list of paths to try: numbered files first, then original filename
+        const pathsToTry = [];
 
+        // Try numbered format first (1.jpg, 1.png, etc.)
+        for (const ext of imageExtensions) {
+            pathsToTry.push({
+                path: `${basePath}${sceneNumber}.${ext}`,
+                filename: `${sceneNumber}.${ext}`
+            });
+        }
+
+        // Also try original filename from scene data if it exists
+        if (scene.image) {
+            pathsToTry.push({
+                path: `${basePath}${scene.image}`,
+                filename: scene.image
+            });
+            // Try original filename without path prefix if it has one
+            const bareFilename = scene.image.split('/').pop();
+            if (bareFilename !== scene.image) {
+                pathsToTry.push({
+                    path: `${basePath}${bareFilename}`,
+                    filename: bareFilename
+                });
+            }
+        }
+
+        // Try each path until one works
+        let found = false;
+        for (const { path: imagePath, filename } of pathsToTry) {
             try {
-                // Create a test image to check if file exists
                 const exists = await checkImageExists(imagePath);
                 if (exists) {
                     scene.mediaUrl = imagePath;
                     scene.mediaLoaded = true;
-                    scene.image = `${sceneNumber}.${ext}`;
+                    scene.image = filename;
                     loadedCount++;
-                    console.log(`Loaded scene ${sceneNumber}: ${imagePath}`);
+                    found = true;
+                    console.log(`Loaded scene ${sceneNumber}: ${imagePath} (updated scene.image to: ${filename})`);
 
                     // Update timeline with newly loaded image
                     updateSceneClipThumb(scene.id, imagePath);
 
-                    break; // Found image, stop trying other extensions
+                    break; // Found image, stop trying other paths
                 }
             } catch (error) {
-                // File doesn't exist with this extension, try next
+                // File doesn't exist with this path, try next
                 continue;
             }
+        }
+        if (!found) {
+            console.warn(`Scene ${sceneNumber} (id: ${scene.id}): No image found. Original scene.image: ${scene.image}`);
         }
     }
 
     // Hide loading overlay
     hideMediaLoadingOverlay();
 
+    // Count scenes that actually have mediaUrl set
+    const scenesWithMedia = EditorState.scenes.filter(s => s.mediaUrl);
+    console.log(`Auto-load complete: ${loadedCount} reported, ${scenesWithMedia.length} scenes have mediaUrl`);
+
+    // Always update preview with current scene state
+    if (EditorState.preview) {
+        console.log('Calling setScenes on preview...');
+        EditorState.preview.setScenes(EditorState.scenes);
+        EditorState.preview.render();
+    }
+
     // Update UI if any images were loaded
-    if (loadedCount > 0) {
+    if (scenesWithMedia.length > 0) {
         // Hide placeholder if we have media
         elements.previewPlaceholder?.classList.add('hidden');
 
         // Update timeline to show thumbnails
         renderTimeline();
 
-        // Update preview with loaded media
-        if (EditorState.preview) {
-            EditorState.preview.setScenes(EditorState.scenes);
-            EditorState.preview.render();
-        }
-
         // Update media status
         if (elements.mediaStatus) {
-            elements.mediaStatus.textContent = `${loadedCount} images loaded`;
+            elements.mediaStatus.textContent = `${scenesWithMedia.length} images loaded`;
         }
 
-        showToast(`Auto-loaded ${loadedCount} scene images`, 'success');
+        showToast(`Auto-loaded ${scenesWithMedia.length} scene images`, 'success');
     } else {
         showToast(`No images found in working-assets/${projectId}/`, 'info');
     }
@@ -1079,27 +1571,45 @@ function renderSceneProperties() {
     const fontStyleSelect = document.getElementById('prop-font-style');
 
     durationInput?.addEventListener('change', (e) => {
-        scene.duration = parseFloat(e.target.value) || 0.5;
+        const oldValue = scene.duration;
+        const newValue = parseFloat(e.target.value) || 0.5;
+        scene.duration = newValue;
+        recordEdit(`Change duration (Scene ${scene.id})`, scene.id, 'duration', oldValue, newValue);
         recalculateDuration();
         renderTimeline();
     });
 
     effectSelect?.addEventListener('change', (e) => {
-        scene.visual_fx = e.target.value;
+        const oldValue = scene.visual_fx;
+        const newValue = e.target.value;
+        scene.visual_fx = newValue;
+        recordEdit(`Change effect (Scene ${scene.id})`, scene.id, 'visual_fx', oldValue, newValue);
     });
 
-    // Text content change - update scene and refresh preview
+    // Text content change - update scene and refresh preview (debounced save)
+    let textDebounceTimer = null;
     textContentInput?.addEventListener('input', (e) => {
+        const oldValue = scene.text_content;
         scene.text_content = e.target.value;
         // Refresh preview to show updated text
         if (EditorState.preview) {
             EditorState.preview.seek(EditorState.playbackPosition);
         }
+        // Debounce recording to avoid saving every keystroke
+        clearTimeout(textDebounceTimer);
+        textDebounceTimer = setTimeout(() => {
+            if (oldValue !== scene.text_content) {
+                recordEdit(`Edit text (Scene ${scene.id})`, scene.id, 'text_content', oldValue, scene.text_content);
+            }
+        }, 1000);
     });
 
     // Text size change - update scene and refresh preview
     textSizeSelect?.addEventListener('change', (e) => {
-        scene.text_size = e.target.value;
+        const oldValue = scene.text_size;
+        const newValue = e.target.value;
+        scene.text_size = newValue;
+        recordEdit(`Change text size (Scene ${scene.id})`, scene.id, 'text_size', oldValue, newValue);
         if (EditorState.preview) {
             EditorState.preview.seek(EditorState.playbackPosition);
         }
@@ -1107,7 +1617,10 @@ function renderSceneProperties() {
 
     // Font style change - update scene and refresh preview
     fontStyleSelect?.addEventListener('change', (e) => {
-        scene.font_style = e.target.value;
+        const oldValue = scene.font_style;
+        const newValue = e.target.value;
+        scene.font_style = newValue;
+        recordEdit(`Change font style (Scene ${scene.id})`, scene.id, 'font_style', oldValue, newValue);
         if (EditorState.preview) {
             EditorState.preview.seek(EditorState.playbackPosition);
         }
@@ -1115,8 +1628,10 @@ function renderSceneProperties() {
 
     // Text color change - update scene and refresh preview
     textColorSelect?.addEventListener('change', (e) => {
-        scene.text_color = e.target.value;
-        // Refresh preview to show updated color
+        const oldValue = scene.text_color;
+        const newValue = e.target.value;
+        scene.text_color = newValue;
+        recordEdit(`Change text color (Scene ${scene.id})`, scene.id, 'text_color', oldValue, newValue);
         if (EditorState.preview) {
             EditorState.preview.seek(EditorState.playbackPosition);
         }
@@ -1300,6 +1815,29 @@ function setupEventListeners() {
 
     // Volume/Mute Toggle
     elements.volumeBtn?.addEventListener('click', toggleMute);
+
+    // Undo/Redo buttons
+    document.getElementById('undo-btn')?.addEventListener('click', undoEdit);
+    document.getElementById('redo-btn')?.addEventListener('click', redoEdit);
+
+    // History dropdown
+    setupHistoryDropdown();
+
+    // Keyboard shortcuts for undo/redo
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+            e.preventDefault();
+            if (e.shiftKey) {
+                redoEdit();
+            } else {
+                undoEdit();
+            }
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+            e.preventDefault();
+            redoEdit();
+        }
+    });
 
     // Time scrubber
     elements.timeScrubber?.addEventListener('input', (e) => {

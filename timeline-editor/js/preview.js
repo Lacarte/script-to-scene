@@ -87,7 +87,10 @@ export class CanvasPreview {
      */
     setScenes(scenes) {
         this.scenes = scenes;
+        const withMedia = scenes.filter(s => s.mediaUrl).length;
+        console.log(`Preview: setScenes called with ${scenes.length} scenes (${withMedia} with mediaUrl)`);
         this.preloadImages().then(() => {
+            console.log(`Preview: preloadImages complete, cache has ${this.imageCache.size} images`);
             this.render();
         });
     }
@@ -99,12 +102,21 @@ export class CanvasPreview {
         for (const scene of this.scenes) {
             if (scene.mediaUrl && !this.imageCache.has(scene.id)) {
                 const img = new Image();
-                img.crossOrigin = 'anonymous';
+                // Only set crossOrigin for non-local URLs (blob: or http:)
+                if (scene.mediaUrl.startsWith('blob:') || scene.mediaUrl.startsWith('http')) {
+                    img.crossOrigin = 'anonymous';
+                }
 
                 try {
                     await new Promise((resolve, reject) => {
-                        img.onload = resolve;
-                        img.onerror = reject;
+                        img.onload = () => {
+                            console.log(`Preview: Loaded image for scene ${scene.id}`);
+                            resolve();
+                        };
+                        img.onerror = (e) => {
+                            console.warn(`Preview: Failed to load image for scene ${scene.id}:`, scene.mediaUrl, e);
+                            reject(e);
+                        };
                         img.src = scene.mediaUrl;
                     });
                     this.imageCache.set(scene.id, img);
