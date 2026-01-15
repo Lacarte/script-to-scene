@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import shutil
 from PIL import Image, ImageDraw, ImageFont
+import platform
 
 # Check if ffmpeg-python is available, fallback to subprocess
 try:
@@ -16,6 +17,106 @@ try:
 except ImportError:
     USE_FFMPEG_PYTHON = False
     print("Warning: ffmpeg-python not found, using subprocess fallback")
+
+
+# Font family mapping: frontend name -> system font paths by OS
+# These match the fonts available in the frontend preview.js
+FONT_MAP = {
+    'Inter': {
+        'win32': ['C:/Windows/Fonts/Inter-Regular.ttf', 'C:/Windows/Fonts/segoeui.ttf', 'arial.ttf'],
+        'darwin': ['/System/Library/Fonts/SFCompact.ttf', '/Library/Fonts/Inter-Regular.ttf'],
+        'linux': ['/usr/share/fonts/truetype/inter/Inter-Regular.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']
+    },
+    'Roboto': {
+        'win32': ['C:/Windows/Fonts/Roboto-Regular.ttf', 'arial.ttf'],
+        'darwin': ['/Library/Fonts/Roboto-Regular.ttf', '/System/Library/Fonts/Helvetica.ttc'],
+        'linux': ['/usr/share/fonts/truetype/roboto/Roboto-Regular.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']
+    },
+    'Open Sans': {
+        'win32': ['C:/Windows/Fonts/OpenSans-Regular.ttf', 'arial.ttf'],
+        'darwin': ['/Library/Fonts/OpenSans-Regular.ttf'],
+        'linux': ['/usr/share/fonts/truetype/open-sans/OpenSans-Regular.ttf']
+    },
+    'Montserrat': {
+        'win32': ['C:/Windows/Fonts/Montserrat-Regular.ttf', 'arial.ttf'],
+        'darwin': ['/Library/Fonts/Montserrat-Regular.ttf'],
+        'linux': ['/usr/share/fonts/truetype/montserrat/Montserrat-Regular.ttf']
+    },
+    'Poppins': {
+        'win32': ['C:/Windows/Fonts/Poppins-Regular.ttf', 'arial.ttf'],
+        'darwin': ['/Library/Fonts/Poppins-Regular.ttf'],
+        'linux': ['/usr/share/fonts/truetype/poppins/Poppins-Regular.ttf']
+    },
+    'Playfair Display': {
+        'win32': ['C:/Windows/Fonts/PlayfairDisplay-Regular.ttf', 'times.ttf'],
+        'darwin': ['/Library/Fonts/PlayfairDisplay-Regular.ttf', '/System/Library/Fonts/Times.ttc'],
+        'linux': ['/usr/share/fonts/truetype/playfair-display/PlayfairDisplay-Regular.ttf']
+    },
+    'Merriweather': {
+        'win32': ['C:/Windows/Fonts/Merriweather-Regular.ttf', 'times.ttf'],
+        'darwin': ['/Library/Fonts/Merriweather-Regular.ttf'],
+        'linux': ['/usr/share/fonts/truetype/merriweather/Merriweather-Regular.ttf']
+    },
+    'Lato': {
+        'win32': ['C:/Windows/Fonts/Lato-Regular.ttf', 'arial.ttf'],
+        'darwin': ['/Library/Fonts/Lato-Regular.ttf'],
+        'linux': ['/usr/share/fonts/truetype/lato/Lato-Regular.ttf']
+    },
+    'Oswald': {
+        'win32': ['C:/Windows/Fonts/Oswald-Regular.ttf', 'arial.ttf'],
+        'darwin': ['/Library/Fonts/Oswald-Regular.ttf'],
+        'linux': ['/usr/share/fonts/truetype/oswald/Oswald-Regular.ttf']
+    },
+    'Raleway': {
+        'win32': ['C:/Windows/Fonts/Raleway-Regular.ttf', 'arial.ttf'],
+        'darwin': ['/Library/Fonts/Raleway-Regular.ttf'],
+        'linux': ['/usr/share/fonts/truetype/raleway/Raleway-Regular.ttf']
+    },
+    'Bebas Neue': {
+        'win32': ['C:/Windows/Fonts/BebasNeue-Regular.ttf', 'impact.ttf'],
+        'darwin': ['/Library/Fonts/BebasNeue-Regular.ttf'],
+        'linux': ['/usr/share/fonts/truetype/bebas-neue/BebasNeue-Regular.ttf']
+    },
+    'Anton': {
+        'win32': ['C:/Windows/Fonts/Anton-Regular.ttf', 'impact.ttf'],
+        'darwin': ['/Library/Fonts/Anton-Regular.ttf'],
+        'linux': ['/usr/share/fonts/truetype/anton/Anton-Regular.ttf']
+    },
+    'Archivo Black': {
+        'win32': ['C:/Windows/Fonts/ArchivoBlack-Regular.ttf', 'arialbd.ttf'],
+        'darwin': ['/Library/Fonts/ArchivoBlack-Regular.ttf'],
+        'linux': ['/usr/share/fonts/truetype/archivo-black/ArchivoBlack-Regular.ttf']
+    },
+    'Bangers': {
+        'win32': ['C:/Windows/Fonts/Bangers-Regular.ttf', 'comic.ttf'],
+        'darwin': ['/Library/Fonts/Bangers-Regular.ttf'],
+        'linux': ['/usr/share/fonts/truetype/bangers/Bangers-Regular.ttf']
+    },
+    'Permanent Marker': {
+        'win32': ['C:/Windows/Fonts/PermanentMarker-Regular.ttf', 'comic.ttf'],
+        'darwin': ['/Library/Fonts/PermanentMarker-Regular.ttf'],
+        'linux': ['/usr/share/fonts/truetype/permanent-marker/PermanentMarker-Regular.ttf']
+    },
+    'Pacifico': {
+        'win32': ['C:/Windows/Fonts/Pacifico-Regular.ttf', 'comic.ttf'],
+        'darwin': ['/Library/Fonts/Pacifico-Regular.ttf'],
+        'linux': ['/usr/share/fonts/truetype/pacifico/Pacifico-Regular.ttf']
+    }
+}
+
+# Bold font variants mapping
+FONT_BOLD_MAP = {
+    'Inter': 'Inter-Bold.ttf',
+    'Roboto': 'Roboto-Bold.ttf',
+    'Open Sans': 'OpenSans-Bold.ttf',
+    'Montserrat': 'Montserrat-Bold.ttf',
+    'Poppins': 'Poppins-Bold.ttf',
+    'Playfair Display': 'PlayfairDisplay-Bold.ttf',
+    'Merriweather': 'Merriweather-Bold.ttf',
+    'Lato': 'Lato-Bold.ttf',
+    'Oswald': 'Oswald-Bold.ttf',
+    'Raleway': 'Raleway-Bold.ttf',
+}
 
 
 class VideoProcessor:
@@ -103,14 +204,92 @@ class VideoProcessor:
 
         return output_path
 
+    def _load_font(self, font_family, font_size, font_style='normal'):
+        """
+        Load font by family name with fallback support
+
+        Args:
+            font_family: Font family name from frontend (e.g., 'Inter', 'Roboto')
+            font_size: Font size in pixels
+            font_style: 'normal', 'bold', or 'italic'
+
+        Returns:
+            PIL ImageFont object
+        """
+        current_os = platform.system().lower()
+        os_key = 'win32' if current_os == 'windows' else ('darwin' if current_os == 'darwin' else 'linux')
+
+        # Get font paths for this family
+        font_paths = []
+        if font_family in FONT_MAP:
+            font_paths = FONT_MAP[font_family].get(os_key, [])
+
+            # If bold style requested, try bold variant first
+            if font_style == 'bold' and font_family in FONT_BOLD_MAP:
+                bold_name = FONT_BOLD_MAP[font_family]
+                # Try to find bold in same directories
+                for path in font_paths:
+                    bold_path = path.replace('-Regular', '-Bold').replace('.ttf', '')
+                    if '-Bold' not in bold_path:
+                        bold_path = path.rsplit('.', 1)[0] + '-Bold.ttf'
+                    font_paths.insert(0, bold_path)
+
+        # Add fallback fonts
+        fallback_fonts = [
+            'arial.ttf', 'arialbd.ttf',
+            'C:/Windows/Fonts/arial.ttf',
+            'C:/Windows/Fonts/arialbd.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/System/Library/Fonts/Helvetica.ttc'
+        ]
+        font_paths.extend(fallback_fonts)
+
+        # Try each font path
+        for font_path in font_paths:
+            try:
+                font = ImageFont.truetype(font_path, font_size)
+                print(f"    [Font] Loaded: {font_path}")
+                return font
+            except (OSError, IOError):
+                continue
+
+        # Final fallback to default
+        print(f"    [Font] Using default font (requested: {font_family})")
+        return ImageFont.load_default()
+
     def _render_text_image(self, text_config, output_path):
         """
         Render text overlay on background image or solid color
+
+        Supports:
+        - Custom font family and style
+        - Percentage-based positioning (text_x, text_y)
+        - Text alignment (left, center, right)
+        - Vertical alignment (top, center, bottom)
         """
         content = text_config.get('content', '')
         text_color = text_config.get('color', 'white')
         color_hex = text_config.get('color_hex', '#ffffff')
         background = text_config.get('background', {})
+
+        # Get font settings
+        font_family = text_config.get('font_family', 'Inter')
+        font_size = text_config.get('font_size', 48)
+        font_style = text_config.get('font_style', 'bold')
+
+        # Get position settings
+        position = text_config.get('position', {})
+        text_x = position.get('x')  # Percentage 0-100, or None
+        text_y = position.get('y')  # Percentage 0-100, or None
+
+        # Get alignment settings (used when position is null)
+        text_align = text_config.get('text_align', 'center')
+        vertical_align = text_config.get('vertical_align', 'center')
+
+        print(f"    [Text] Font: {font_family} {font_size}px {font_style}")
+        print(f"    [Text] Position: x={text_x}, y={text_y}")
+        print(f"    [Text] Align: {text_align}/{vertical_align}")
 
         # Try to load background image
         bg_image = None
@@ -121,8 +300,9 @@ class VideoProcessor:
                 bg_image = Image.open(full_path).convert('RGB')
                 # Resize to target resolution
                 bg_image = bg_image.resize((self.width, self.height), Image.Resampling.LANCZOS)
+                print(f"    [Text] Background: {bg_image_path}")
             except Exception as e:
-                print(f"Could not load background image: {e}")
+                print(f"    [Text] Could not load background image: {e}")
                 bg_image = None
 
         # Create image with background
@@ -132,39 +312,63 @@ class VideoProcessor:
             # Fallback to solid color
             fallback_color = background.get('fallback_color', '#000000')
             img = Image.new('RGB', (self.width, self.height), fallback_color)
+            print(f"    [Text] Using solid background: {fallback_color}")
 
         draw = ImageDraw.Draw(img)
 
-        # Load font
-        font_size = text_config.get('font_size', 48)
-        try:
-            # Try system fonts
-            font = ImageFont.truetype("arial.ttf", font_size)
-        except:
-            try:
-                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
-            except:
-                font = ImageFont.load_default()
+        # Load font with family and style
+        font = self._load_font(font_family, font_size, font_style)
 
         # Word wrap text
         padding = text_config.get('padding', 80)
         max_width = self.width - (padding * 2)
         lines = self._wrap_text(content, font, max_width, draw)
 
-        # Calculate text position (centered)
+        # Calculate line height and total text height
         line_height = font_size * 1.3
         total_height = len(lines) * line_height
-        y = (self.height - total_height) / 2
 
-        # Draw text
+        # Determine Y position
+        if text_y is not None:
+            # Use percentage-based Y position (0=top, 100=bottom)
+            # Position is the center of the text block
+            y = (text_y / 100) * self.height - (total_height / 2)
+        else:
+            # Use vertical alignment
+            if vertical_align == 'top':
+                y = padding
+            elif vertical_align == 'bottom':
+                y = self.height - total_height - padding
+            else:  # center
+                y = (self.height - total_height) / 2
+
+        # Draw each line
         for line in lines:
             bbox = draw.textbbox((0, 0), line, font=font)
             text_width = bbox[2] - bbox[0]
-            x = (self.width - text_width) / 2
+
+            # Determine X position for this line
+            if text_x is not None:
+                # Use percentage-based X position (0=left, 100=right)
+                # Position is the center of the text
+                x = (text_x / 100) * self.width - (text_width / 2)
+            else:
+                # Use text alignment
+                if text_align == 'left':
+                    x = padding
+                elif text_align == 'right':
+                    x = self.width - text_width - padding
+                else:  # center
+                    x = (self.width - text_width) / 2
+
+            # Clamp X to prevent text going off-screen
+            x = max(padding / 2, min(x, self.width - text_width - padding / 2))
+
             draw.text((x, y), line, fill=color_hex, font=font)
             y += line_height
 
         img.save(output_path, 'PNG')
+        print(f"    [Text] Saved: {output_path}")
 
     def _wrap_text(self, text, font, max_width, draw):
         """Wrap text to fit within max_width"""

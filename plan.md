@@ -232,3 +232,176 @@ DELETE (via batchUpdate)              // Remove scene
 - Drag-to-reorder scenes
 - Image upload integration
 - Video export
+
+
+
+
+
+FEATURES AND FIXES
+
+between "Script-to-Scene Timeline"
+"Video Editor" add an assets requisition 
+to auto generate the images ,video and audio in midjourney and elevenlabs from the Script-to-Scene  Timeline the prompt to midjourney that is in the image type scene
+to auto generate the images ,video and audio in midjourney and elevenlabs from the Script-to-Scene  Timeline the prompt to elevenlabs that is in the image type scene
+the audio text to elevenlabs that is in the script in the  project  add the button to stage them to pass to the video editor
+
+review font on video 
+
+make a real video 
+
+review transition and effect and video
+
+multitrack video/image and audio 
+
+
+text position and font on video VERY EFFEC
+
+
+---
+
+## 🎯 PROJECT ANALYSIS & IMPROVEMENTS
+
+### Analysis Date: January 2026
+
+---
+
+### 📊 CURRENT STATUS
+
+The two-stage video production system is functional with:
+- ✅ Stage 1: JSON Corrector (Google Sheets integration)
+- ✅ Stage 2: Video Editor (timeline editing, preview, effects)
+- ✅ Backend: Python + FFmpeg video export
+- ✅ Text scenes with custom fonts, colors, positioning
+- ✅ Draggable text positioning in preview
+- ✅ Edit history with undo/redo
+
+---
+
+### 🔴 CRITICAL ISSUES
+
+#### 1. Backend Text Rendering Gap
+**Problem:** Frontend sends detailed text properties, but `video_processor.py` ignores:
+- `font_family` - Uses hardcoded Arial
+- `text_x`, `text_y` - Uses center positioning only
+- `text_align`, `vertical_align` - Ignored
+- `font_style` - Ignored (bold, italic)
+
+**Impact:** Exported videos don't match preview
+
+#### 2. Preview vs Export Visual Inconsistency
+**Problem:** Different rendering engines (Canvas vs PIL) produce different results
+- Font rendering differences
+- Text wrapping differences
+- Position calculation variations
+
+---
+
+### 🟡 WORKFLOW BOTTLENECKS
+
+#### 1. Missing Asset Generation Pipeline
+- No direct Midjourney integration
+- No ElevenLabs audio generation
+- Manual image/audio preparation required
+- Assets must be named exactly to match scenes
+
+#### 2. Manual Media File Management
+- User must manually organize files in `working-assets/{project_id}/`
+- Background images (wbg.png/bbg.png) must be manually added
+- No batch rename or auto-match tools
+
+#### 3. State Management Fragmentation
+- Edit history in `editorState.editHistory`
+- Scene edits in localStorage
+- Project data in sessionStorage
+- No unified state store
+
+---
+
+### 🟢 QUICK WINS (Low effort, High impact)
+
+1. **Font mapping file** - Map frontend font names to system fonts
+2. **Position passthrough** - Use text_x/text_y in backend
+3. **Add default backgrounds** - Ship default wbg.png/bbg.png
+4. **Better error messages** - More descriptive FFmpeg errors
+
+---
+
+### 🔧 IMMEDIATE FIXES (Applied)
+
+#### Fix 1: Backend Text Position Support
+Update `video_processor.py` `_render_text_image()` to:
+- Read `position.x` and `position.y` from text_config
+- Apply percentage-based positioning when set
+- Fall back to alignment-based positioning when null
+
+#### Fix 2: Backend Font Family Support
+Update `video_processor.py` to:
+- Create font mapping dictionary
+- Load font by family name from config
+- Handle font style (bold/italic)
+- Graceful fallback to system fonts
+
+#### Fix 3: Backend Text Alignment Support
+Update `video_processor.py` to:
+- Use `text_align` for horizontal alignment
+- Use `vertical_align` for vertical positioning
+- Match Canvas rendering behavior
+
+---
+
+### 📋 FUTURE ENHANCEMENTS
+
+#### Phase A: Asset Pipeline Integration
+- [ ] Midjourney prompt → API submission
+- [ ] ElevenLabs script → audio generation
+- [ ] Auto-download and organize assets
+- [ ] Asset status tracking per scene
+
+#### Phase B: Preview/Export Parity
+- [ ] Use same font files in frontend and backend
+- [ ] Share text wrapping algorithm
+- [ ] Visual diff testing tool
+- [ ] "Export Preview" mode showing actual render
+
+#### Phase C: State Management Refactor
+- [ ] Unified state store (similar to Redux pattern)
+- [ ] State persistence abstraction
+- [ ] Cross-tab synchronization
+- [ ] Better undo/redo granularity
+
+#### Phase D: Multi-track Timeline
+- [ ] Multiple video tracks (A/B roll)
+- [ ] Text overlay track
+- [ ] Multiple audio tracks
+- [ ] Track locking and muting
+
+---
+
+### 🗂️ FILE ORGANIZATION RECOMMENDATIONS
+
+```
+working-assets/{project_id}/
+├── images/          # Scene images (1.jpg, 2.jpg, etc.)
+├── audio/           # Audio files
+├── backgrounds/     # Text backgrounds (wbg.png, bbg.png)
+└── generated/       # AI-generated assets (future)
+```
+
+---
+
+### 📈 PERFORMANCE OPTIMIZATIONS
+
+1. **Preview Caching**
+   - Cache rendered frames at key positions
+   - Use requestAnimationFrame throttling
+   - Debounce property changes
+
+2. **Export Optimization**
+   - Use faster FFmpeg preset for previews
+   - Parallel scene processing
+   - GPU acceleration (if available)
+
+3. **Large Project Handling**
+   - Virtual scrolling for 50+ scene timelines
+   - Lazy load scene thumbnails
+   - Paginated API requests
