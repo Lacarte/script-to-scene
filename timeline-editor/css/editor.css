@@ -153,6 +153,10 @@
     color: var(--accent-primary);
 }
 
+.control-btn-minimal.muted {
+    color: var(--accent-error);
+}
+
 .time-display {
     font-size: 0.75rem;
     font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
@@ -767,6 +771,20 @@
     font-weight: 500;
 }
 
+.property-row {
+    display: flex;
+    gap: 8px;
+}
+
+.property-half {
+    flex: 1;
+    min-width: 0;
+}
+
+.property-half .property-select {
+    width: 100%;
+}
+
 .property-input {
     width: 80px;
     padding: 4px 8px;
@@ -796,6 +814,28 @@
 .property-select:focus {
     outline: none;
     border-color: var(--accent-primary);
+}
+
+.property-textarea {
+    width: 100%;
+    padding: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.75rem;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 60px;
+}
+
+.property-textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.property-textarea::placeholder {
+    color: var(--text-muted);
 }
 
 /* No Data Overlay */

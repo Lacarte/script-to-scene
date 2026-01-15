@@ -280,7 +280,11 @@ export class CanvasPreview {
         // Render text on top with fade effect
         const textContent = scene.text_content || scene.script;
         if (textContent) {
-            this.renderTextOverlay(textContent, progress, textColor);
+            this.renderTextOverlay(textContent, progress, {
+                color: textColor,
+                size: scene.text_size || 'medium',
+                style: scene.font_style || 'bold'
+            });
         }
     }
 
@@ -309,9 +313,21 @@ export class CanvasPreview {
     }
 
     /**
-     * Render text overlay - centered on screen with specified color
+     * Render text overlay - centered on screen with specified options
+     * @param {string} text - Text to render
+     * @param {number} progress - Animation progress (0-1)
+     * @param {object|string} options - Text options or legacy textColor string
      */
-    renderTextOverlay(text, progress, textColor = 'white') {
+    renderTextOverlay(text, progress, options = {}) {
+        // Support legacy string parameter for backward compatibility
+        if (typeof options === 'string') {
+            options = { color: options };
+        }
+
+        const textColor = options.color || 'white';
+        const textSize = options.size || 'medium';
+        const fontStyle = options.style || 'bold';
+
         this.ctx.save();
 
         // Apply fade effect based on progress
@@ -324,18 +340,51 @@ export class CanvasPreview {
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
 
-        // Calculate font size based on text length and canvas size
-        const maxWidth = this.width * 0.8;
-        const baseFontSize = Math.min(48, this.height / 10);
+        // Calculate font size based on size option and canvas
+        const sizeMultipliers = {
+            small: 0.6,
+            medium: 1.0,
+            large: 1.4,
+            xlarge: 1.8
+        };
+        const sizeMultiplier = sizeMultipliers[textSize] || 1.0;
+        const baseFontSize = Math.min(48, this.height / 10) * sizeMultiplier;
+
+        // Build font string based on style
+        let fontWeight = '400';  // normal
+        let fontStyleStr = 'normal';
+
+        switch (fontStyle) {
+            case 'bold':
+                fontWeight = '700';
+                break;
+            case 'light':
+                fontWeight = '300';
+                break;
+            case 'italic':
+                fontStyleStr = 'italic';
+                break;
+            case 'bold-italic':
+                fontWeight = '700';
+                fontStyleStr = 'italic';
+                break;
+            case 'normal':
+            default:
+                fontWeight = '400';
+                break;
+        }
+
+        const fontString = `${fontStyleStr} ${fontWeight} ${baseFontSize}px Inter, sans-serif`;
 
         // Word wrap the text
-        const lines = this.wrapText(text, maxWidth, baseFontSize);
+        const maxWidth = this.width * 0.8;
+        const lines = this.wrapText(text, maxWidth, baseFontSize, fontString);
         const lineHeight = baseFontSize * 1.3;
         const totalHeight = lines.length * lineHeight;
         const startY = (this.height - totalHeight) / 2 + lineHeight / 2;
 
         // Draw each line
-        this.ctx.font = `bold ${baseFontSize}px Inter, sans-serif`;
+        this.ctx.font = fontString;
         lines.forEach((line, index) => {
             this.ctx.fillText(line, this.width / 2, startY + index * lineHeight);
         });
@@ -345,9 +394,13 @@ export class CanvasPreview {
 
     /**
      * Wrap text to fit within maxWidth
+     * @param {string} text - Text to wrap
+     * @param {number} maxWidth - Maximum line width
+     * @param {number} fontSize - Font size (used for fallback font string)
+     * @param {string} fontString - Optional full font string to use
      */
-    wrapText(text, maxWidth, fontSize) {
-        this.ctx.font = `bold ${fontSize}px Inter, sans-serif`;
+    wrapText(text, maxWidth, fontSize, fontString = null) {
+        this.ctx.font = fontString || `bold ${fontSize}px Inter, sans-serif`;
         const words = text.split(' ');
         const lines = [];
         let currentLine = '';

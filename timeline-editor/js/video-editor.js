@@ -77,7 +77,8 @@ const EditorState = {
     pixelsPerSecond: 20,
     preview: null,  // CanvasPreview instance
     audio: null,    // Audio info
-    audioElement: null  // HTML Audio element for playback
+    audioElement: null,  // HTML Audio element for playback
+    isMuted: false  // Audio mute state
 };
 
 // ============================================================
@@ -184,6 +185,7 @@ const elements = {
     timeScrubber: document.getElementById('time-scrubber'),
     playBtn: document.getElementById('play-btn'),
     loopBtn: document.getElementById('loop-btn'),  // Loop toggle button
+    volumeBtn: document.getElementById('volume-btn'),  // Volume/mute button
     selectFolderBtn: document.getElementById('select-folder'),
     mediaStatus: document.getElementById('media-status'),
     zoomIn: document.getElementById('zoom-in'),
@@ -996,6 +998,8 @@ function renderSceneProperties() {
         return;
     }
 
+    const isTextScene = scene.type === 'text' || scene.type === 'cta';
+
     elements.sceneProperties.innerHTML = `
         <div class="property-group">
             <label>Scene ID</label>
@@ -1010,18 +1014,54 @@ function renderSceneProperties() {
             <input type="number" class="property-input" id="prop-duration"
                    value="${scene.duration}" min="0.5" step="0.5">
         </div>
-        <div class="property-group">
-            <label>Effect</label>
-            <select class="property-select" id="prop-effect">
-                <option value="static" ${scene.visual_fx === 'static' ? 'selected' : ''}>Static</option>
-                <option value="zoom_in" ${scene.visual_fx === 'zoom_in' ? 'selected' : ''}>Zoom In</option>
-                <option value="zoom_out" ${scene.visual_fx === 'zoom_out' ? 'selected' : ''}>Zoom Out</option>
-                <option value="pan_left" ${scene.visual_fx === 'pan_left' ? 'selected' : ''}>Pan Left</option>
-                <option value="pan_right" ${scene.visual_fx === 'pan_right' ? 'selected' : ''}>Pan Right</option>
-                <option value="fade" ${scene.visual_fx === 'fade' ? 'selected' : ''}>Fade</option>
-                <option value="shake" ${scene.visual_fx === 'shake' ? 'selected' : ''}>Shake</option>
-            </select>
-        </div>
+        ${isTextScene ? `
+            <div class="property-group">
+                <label>Text Content</label>
+                <textarea class="property-textarea" id="prop-text-content"
+                          rows="4" placeholder="Enter text to display...">${scene.text_content || scene.script || ''}</textarea>
+            </div>
+            <div class="property-row">
+                <div class="property-group property-half">
+                    <label>Size</label>
+                    <select class="property-select" id="prop-text-size">
+                        <option value="small" ${scene.text_size === 'small' ? 'selected' : ''}>Small</option>
+                        <option value="medium" ${(scene.text_size || 'medium') === 'medium' ? 'selected' : ''}>Medium</option>
+                        <option value="large" ${scene.text_size === 'large' ? 'selected' : ''}>Large</option>
+                        <option value="xlarge" ${scene.text_size === 'xlarge' ? 'selected' : ''}>X-Large</option>
+                    </select>
+                </div>
+                <div class="property-group property-half">
+                    <label>Style</label>
+                    <select class="property-select" id="prop-font-style">
+                        <option value="bold" ${(scene.font_style || 'bold') === 'bold' ? 'selected' : ''}>Bold</option>
+                        <option value="normal" ${scene.font_style === 'normal' ? 'selected' : ''}>Regular</option>
+                        <option value="light" ${scene.font_style === 'light' ? 'selected' : ''}>Light</option>
+                        <option value="italic" ${scene.font_style === 'italic' ? 'selected' : ''}>Italic</option>
+                        <option value="bold-italic" ${scene.font_style === 'bold-italic' ? 'selected' : ''}>Bold Italic</option>
+                    </select>
+                </div>
+            </div>
+            <div class="property-group">
+                <label>Text Color</label>
+                <select class="property-select" id="prop-text-color">
+                    <option value="white" ${(scene.text_color || 'white') === 'white' ? 'selected' : ''}>White (dark bg)</option>
+                    <option value="black" ${scene.text_color === 'black' ? 'selected' : ''}>Black (light bg)</option>
+                </select>
+            </div>
+        ` : `
+            <div class="property-group">
+                <label>Effect</label>
+                <select class="property-select" id="prop-effect">
+                    <option value="static" ${scene.visual_fx === 'static' ? 'selected' : ''}>Static</option>
+                    <option value="zoom_in" ${scene.visual_fx === 'zoom_in' ? 'selected' : ''}>Zoom In</option>
+                    <option value="zoom_out" ${scene.visual_fx === 'zoom_out' ? 'selected' : ''}>Zoom Out</option>
+                    <option value="pan_left" ${scene.visual_fx === 'pan_left' ? 'selected' : ''}>Pan Left</option>
+                    <option value="pan_right" ${scene.visual_fx === 'pan_right' ? 'selected' : ''}>Pan Right</option>
+                    <option value="fade" ${scene.visual_fx === 'fade' ? 'selected' : ''}>Fade</option>
+                    <option value="shake" ${scene.visual_fx === 'shake' ? 'selected' : ''}>Shake</option>
+                </select>
+            </div>
+        `}
         ${scene.image ? `
             <div class="property-group">
                 <label>Image</label>
@@ -1033,6 +1073,10 @@ function renderSceneProperties() {
     // Add event listeners for property changes
     const durationInput = document.getElementById('prop-duration');
     const effectSelect = document.getElementById('prop-effect');
+    const textContentInput = document.getElementById('prop-text-content');
+    const textColorSelect = document.getElementById('prop-text-color');
+    const textSizeSelect = document.getElementById('prop-text-size');
+    const fontStyleSelect = document.getElementById('prop-font-style');
 
     durationInput?.addEventListener('change', (e) => {
         scene.duration = parseFloat(e.target.value) || 0.5;
@@ -1042,6 +1086,40 @@ function renderSceneProperties() {
 
     effectSelect?.addEventListener('change', (e) => {
         scene.visual_fx = e.target.value;
+    });
+
+    // Text content change - update scene and refresh preview
+    textContentInput?.addEventListener('input', (e) => {
+        scene.text_content = e.target.value;
+        // Refresh preview to show updated text
+        if (EditorState.preview) {
+            EditorState.preview.seek(EditorState.playbackPosition);
+        }
+    });
+
+    // Text size change - update scene and refresh preview
+    textSizeSelect?.addEventListener('change', (e) => {
+        scene.text_size = e.target.value;
+        if (EditorState.preview) {
+            EditorState.preview.seek(EditorState.playbackPosition);
+        }
+    });
+
+    // Font style change - update scene and refresh preview
+    fontStyleSelect?.addEventListener('change', (e) => {
+        scene.font_style = e.target.value;
+        if (EditorState.preview) {
+            EditorState.preview.seek(EditorState.playbackPosition);
+        }
+    });
+
+    // Text color change - update scene and refresh preview
+    textColorSelect?.addEventListener('change', (e) => {
+        scene.text_color = e.target.value;
+        // Refresh preview to show updated color
+        if (EditorState.preview) {
+            EditorState.preview.seek(EditorState.playbackPosition);
+        }
     });
 }
 
@@ -1219,6 +1297,9 @@ function setupEventListeners() {
 
     // Loop Toggle
     elements.loopBtn?.addEventListener('click', toggleLoop);
+
+    // Volume/Mute Toggle
+    elements.volumeBtn?.addEventListener('click', toggleMute);
 
     // Time scrubber
     elements.timeScrubber?.addEventListener('input', (e) => {
@@ -1519,6 +1600,47 @@ function toggleLoop() {
             elements.loopBtn.classList.remove('active');
             showToast('Loop disabled', 'info');
         }
+    }
+}
+
+/**
+ * Toggle audio mute
+ */
+function toggleMute() {
+    EditorState.isMuted = !EditorState.isMuted;
+
+    // Apply mute to audio element
+    if (EditorState.audioElement) {
+        EditorState.audioElement.muted = EditorState.isMuted;
+    }
+
+    // Update button icon
+    updateVolumeIcon();
+
+    showToast(EditorState.isMuted ? 'Audio muted' : 'Audio unmuted', 'info');
+}
+
+/**
+ * Update volume button icon based on mute state
+ */
+function updateVolumeIcon() {
+    if (!elements.volumeBtn) return;
+
+    if (EditorState.isMuted) {
+        elements.volumeBtn.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
+            </svg>`;
+        elements.volumeBtn.classList.add('muted');
+    } else {
+        elements.volumeBtn.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+            </svg>`;
+        elements.volumeBtn.classList.remove('muted');
     }
 }
 
