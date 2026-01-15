@@ -1086,6 +1086,45 @@
     pointer-events: none;
 }
 
+/* Playhead Trail */
+.playhead-trail {
+    position: absolute;
+    top: 12px;
+    left: 8px;
+    width: 0;
+    bottom: 0;
+    background: linear-gradient(
+        270deg,
+        rgba(239, 68, 68, 0.4),
+        rgba(239, 68, 68, 0.1)
+    );
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: -1;
+    transform-origin: right center;
+}
+
+.timeline-playhead.dragging .playhead-trail {
+    opacity: 1;
+}
+
+/* Playhead trail glow effect */
+.playhead-trail::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    background: radial-gradient(
+        ellipse at left,
+        rgba(239, 68, 68, 0.8),
+        transparent
+    );
+    pointer-events: none;
+}
+
 /* Time Ruler */
 .time-ruler {
     height: 20px;

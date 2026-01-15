@@ -87,7 +87,8 @@ const EditorState = {
     isMuted: false,  // Audio mute state
     editHistory: [],  // History of edits for undo
     historyIndex: -1,  // Current position in history (-1 = no history)
-    sceneErrors: new Map()  // Map of sceneId -> [error messages]
+    sceneErrors: new Map(),  // Map of sceneId -> [error messages]
+    savedAudioSettings: null  // Saved audio settings from localStorage
 };
 
 // ============================================================
@@ -124,10 +125,17 @@ function saveProjectEdits() {
         font_style: scene.font_style
     }));
 
+    // Include audio settings if audio is loaded
+    const audioSettings = EditorState.audio?.loaded ? {
+        trimmedDuration: EditorState.audio.trimmedDuration,
+        fileName: EditorState.audio.fileName
+    } : null;
+
     const data = {
         projectId: EditorState.project.id,
         savedAt: new Date().toISOString(),
-        edits: edits
+        edits: edits,
+        audio: audioSettings
     };
 
     try {
@@ -164,6 +172,12 @@ function loadProjectEdits() {
                 if (edit.font_style !== undefined) scene.font_style = edit.font_style;
                 appliedCount++;
             }
+        }
+
+        // Store saved audio settings to apply after audio loads
+        if (data.audio) {
+            EditorState.savedAudioSettings = data.audio;
+            console.log('Saved audio settings found:', data.audio);
         }
 
         if (appliedCount > 0) {
@@ -268,25 +282,41 @@ function undoEdit() {
     }
 
     const entry = EditorState.editHistory[EditorState.historyIndex];
-    const scene = EditorState.scenes.find(s => s.id === entry.sceneId);
 
-    if (scene && entry.field) {
-        // Revert the change
-        scene[entry.field] = entry.oldValue;
-
-        // Update UI
-        if (entry.field === 'duration') {
+    // Handle audio edits
+    if (entry.sceneId === 'audio') {
+        if (entry.field === 'trimmedDuration' && EditorState.audio) {
+            EditorState.audio.trimmedDuration = entry.oldValue;
             recalculateDuration();
-            renderTimeline();
+            renderAudioTrack();
+            renderTimeRuler();
+            if (EditorState.preview) {
+                EditorState.preview.setDuration(getTotalDuration());
+            }
         }
-        if (EditorState.selectedScene?.id === entry.sceneId) {
-            renderSceneProperties();
-        }
-        if (EditorState.preview) {
-            EditorState.preview.seek(EditorState.playbackPosition);
-        }
-
         showToast(`Undo: ${entry.action}`, 'info');
+    } else {
+        // Handle scene edits
+        const scene = EditorState.scenes.find(s => s.id === entry.sceneId);
+
+        if (scene && entry.field) {
+            // Revert the change
+            scene[entry.field] = entry.oldValue;
+
+            // Update UI
+            if (entry.field === 'duration') {
+                recalculateDuration();
+                renderTimeline();
+            }
+            if (EditorState.selectedScene?.id === entry.sceneId) {
+                renderSceneProperties();
+            }
+            if (EditorState.preview) {
+                EditorState.preview.seek(EditorState.playbackPosition);
+            }
+
+            showToast(`Undo: ${entry.action}`, 'info');
+        }
     }
 
     EditorState.historyIndex--;
@@ -310,25 +340,41 @@ function redoEdit() {
 
     EditorState.historyIndex++;
     const entry = EditorState.editHistory[EditorState.historyIndex];
-    const scene = EditorState.scenes.find(s => s.id === entry.sceneId);
 
-    if (scene && entry.field) {
-        // Apply the change again
-        scene[entry.field] = entry.newValue;
-
-        // Update UI
-        if (entry.field === 'duration') {
+    // Handle audio edits
+    if (entry.sceneId === 'audio') {
+        if (entry.field === 'trimmedDuration' && EditorState.audio) {
+            EditorState.audio.trimmedDuration = entry.newValue;
             recalculateDuration();
-            renderTimeline();
+            renderAudioTrack();
+            renderTimeRuler();
+            if (EditorState.preview) {
+                EditorState.preview.setDuration(getTotalDuration());
+            }
         }
-        if (EditorState.selectedScene?.id === entry.sceneId) {
-            renderSceneProperties();
-        }
-        if (EditorState.preview) {
-            EditorState.preview.seek(EditorState.playbackPosition);
-        }
-
         showToast(`Redo: ${entry.action}`, 'info');
+    } else {
+        // Handle scene edits
+        const scene = EditorState.scenes.find(s => s.id === entry.sceneId);
+
+        if (scene && entry.field) {
+            // Apply the change again
+            scene[entry.field] = entry.newValue;
+
+            // Update UI
+            if (entry.field === 'duration') {
+                recalculateDuration();
+                renderTimeline();
+            }
+            if (EditorState.selectedScene?.id === entry.sceneId) {
+                renderSceneProperties();
+            }
+            if (EditorState.preview) {
+                EditorState.preview.seek(EditorState.playbackPosition);
+            }
+
+            showToast(`Redo: ${entry.action}`, 'info');
+        }
     }
 
     saveEditHistory();
@@ -1301,8 +1347,16 @@ function loadDefaultAudio() {
     audio.addEventListener('loadedmetadata', () => {
         EditorState.audio.duration = audio.duration;
         EditorState.audio.loaded = true;
+
+        // Restore saved audio trim duration if available
+        if (EditorState.savedAudioSettings?.trimmedDuration) {
+            EditorState.audio.trimmedDuration = EditorState.savedAudioSettings.trimmedDuration;
+            console.log('Restored audio trim duration:', EditorState.audio.trimmedDuration);
+        }
+
         recalculateDuration(); // Recalc total duration including audio
-        showToast('Audio loaded: ' + formatTimestamp(audio.duration), 'success');
+        renderAudioTrack(); // Re-render to show correct trimmed width
+        showToast('Audio loaded: ' + formatTimestamp(EditorState.audio.trimmedDuration || audio.duration), 'success');
     });
 
     audio.addEventListener('error', (e) => {
@@ -1433,6 +1487,13 @@ function startAudioResize(startEvent) {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
 
+        const newDuration = EditorState.audio.trimmedDuration || EditorState.audio.duration;
+
+        // Record the edit if duration actually changed
+        if (newDuration !== startDuration) {
+            recordEdit('Resize audio duration', 'audio', 'trimmedDuration', startDuration, newDuration);
+        }
+
         // Recalculate total duration
         recalculateDuration();
         renderTimeRuler();
@@ -1442,7 +1503,7 @@ function startAudioResize(startEvent) {
             EditorState.preview.setDuration(getTotalDuration());
         }
 
-        showToast(`Audio duration: ${formatTimestamp(EditorState.audio.trimmedDuration || EditorState.audio.duration)}`, 'info');
+        showToast(`Audio duration: ${formatTimestamp(newDuration)}`, 'info');
     };
 
     document.addEventListener('mousemove', onMouseMove);
@@ -1914,11 +1975,13 @@ function easeOutCubic(t) {
  */
 function setupPlayheadDrag() {
     const playhead = document.getElementById('timeline-playhead');
+    const playheadTrail = playhead?.querySelector('.playhead-trail');
     const timelineTracks = document.getElementById('timeline-tracks');
 
     if (!playhead || !timelineTracks) return;
 
     let isDragging = false;
+    let dragStartPosition = 0;
 
     // Calculate time from X position using helper
     const getTimeFromX = (clientX) => {
@@ -1928,11 +1991,40 @@ function setupPlayheadDrag() {
         return Math.max(0, Math.min(time, getTotalDuration()));
     };
 
+    // Update trail width based on current position vs start position
+    const updateTrail = () => {
+        if (!playheadTrail) return;
+        const startPixels = timeToPixels(dragStartPosition);
+        const currentPixels = timeToPixels(EditorState.playbackPosition);
+        const trailWidth = Math.abs(currentPixels - startPixels);
+
+        // Trail extends to the left (negative direction) from playhead
+        playheadTrail.style.width = `${trailWidth}px`;
+
+        // Flip direction based on drag direction
+        if (currentPixels >= startPixels) {
+            // Dragging right - trail extends left from current position
+            playheadTrail.style.transform = 'scaleX(-1)';
+        } else {
+            // Dragging left - trail extends right from current position
+            playheadTrail.style.transform = 'scaleX(1)';
+        }
+    };
+
+    // Reset trail
+    const resetTrail = () => {
+        if (playheadTrail) {
+            playheadTrail.style.width = '0';
+        }
+    };
+
     // Start drag on playhead
     playhead.addEventListener('mousedown', (e) => {
         e.preventDefault();
         isDragging = true;
+        dragStartPosition = EditorState.playbackPosition;
         playhead.classList.add('dragging');
+        resetTrail();
 
         // Pause playback while dragging
         if (EditorState.isPlaying) {
@@ -1946,7 +2038,9 @@ function setupPlayheadDrag() {
         if (e.target.closest('.scene-clip') || e.target.closest('.track-header')) return;
 
         isDragging = true;
+        dragStartPosition = EditorState.playbackPosition;
         playhead.classList.add('dragging');
+        resetTrail();
 
         // Pause playback while dragging
         if (EditorState.isPlaying) {
@@ -1961,6 +2055,7 @@ function setupPlayheadDrag() {
         seekAudio(EditorState.playbackPosition);
         updateTimeScrubber();
         updatePlayhead();
+        updateTrail();
     });
 
     // Handle drag movement
@@ -1974,6 +2069,7 @@ function setupPlayheadDrag() {
         seekAudio(EditorState.playbackPosition);
         updateTimeScrubber();
         updatePlayhead();
+        updateTrail();
     });
 
     // End drag
@@ -1981,6 +2077,7 @@ function setupPlayheadDrag() {
         if (isDragging) {
             isDragging = false;
             playhead.classList.remove('dragging');
+            resetTrail();
         }
     });
 }
