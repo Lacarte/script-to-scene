@@ -2276,6 +2276,12 @@ function setupEventListeners() {
 
     // Setup export modal
     setupExportModal();
+
+    // Setup export progress modal (cancel/close and download buttons)
+    setupExportProgressModal();
+
+    // Prevent accidental window close - warn user about unsaved changes
+    setupBeforeUnloadWarning();
 }
 
 /**
@@ -2874,19 +2880,8 @@ async function exportMp4() {
         return;
     }
 
-    // Setup cancel button
-    elements.cancelExportBtn?.addEventListener('click', async () => {
-        await exportAPI.cancelExport();
-        hideExportProgress();
-        showToast('Export cancelled', 'info');
-    }, { once: true });
-
-    // Setup download button
-    elements.downloadExportBtn?.addEventListener('click', () => {
-        if (currentJobId) {
-            exportAPI.downloadExport(currentJobId);
-        }
-    }, { once: true });
+    // Cancel/Close button handler is set up in setupExportProgressModal()
+    // Download button handler is set up in setupExportProgressModal()
 }
 
 /**
@@ -2994,6 +2989,83 @@ function hideExportProgress() {
     if (elements.cancelExportBtn) {
         elements.cancelExportBtn.textContent = 'Cancel';
     }
+}
+
+/**
+ * Setup export progress modal event listeners
+ */
+function setupExportProgressModal() {
+    // Cancel/Close button - handles both cancelling and closing after error
+    elements.cancelExportBtn?.addEventListener('click', async () => {
+        const isCloseButton = elements.cancelExportBtn.textContent === 'Close';
+        if (isCloseButton) {
+            // Just close the modal
+            hideExportProgress();
+        } else {
+            // Cancel the export
+            await exportAPI.cancelExport();
+            hideExportProgress();
+            showToast('Export cancelled', 'info');
+        }
+    });
+
+    // Download button
+    elements.downloadExportBtn?.addEventListener('click', () => {
+        if (currentJobId) {
+            exportAPI.downloadExport(currentJobId);
+        }
+    });
+}
+
+/**
+ * Check if there are unsaved changes (edits since last save/load)
+ */
+function hasUnsavedChanges() {
+    // Check if we have a project loaded
+    if (!EditorState.project?.id) return false;
+
+    // Check if there are any edits in history
+    if (EditorState.editHistory.length > 0) return true;
+
+    // Check if scenes have been modified from original
+    if (EditorState.scenes.length !== EditorState.originalScenes.length) return true;
+
+    // Compare current scenes with original
+    for (let i = 0; i < EditorState.scenes.length; i++) {
+        const current = EditorState.scenes[i];
+        const original = EditorState.originalScenes[i];
+        if (!original) return true;
+
+        // Check key editable properties
+        if (current.duration !== original.duration ||
+            current.visual_fx !== original.visual_fx ||
+            current.text_content !== original.text_content ||
+            current.text_color !== original.text_color ||
+            current.text_size !== original.text_size ||
+            current.font_family !== original.font_family ||
+            current.text_x !== original.text_x ||
+            current.text_y !== original.text_y) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Setup beforeunload warning to prevent accidental window close
+ */
+function setupBeforeUnloadWarning() {
+    window.addEventListener('beforeunload', (e) => {
+        // Only warn if there's a project with potential changes
+        if (EditorState.project?.id && hasUnsavedChanges()) {
+            // Standard way to trigger browser's "Leave site?" dialog
+            e.preventDefault();
+            // Some browsers require returnValue to be set
+            e.returnValue = '';
+            return '';
+        }
+    });
 }
 
 /**
