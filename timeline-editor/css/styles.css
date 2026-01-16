@@ -347,6 +347,83 @@ body {
     font-size: 0.85rem;
 }
 
+/* Welcome Message */
+.welcome-message {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-primary);
+    z-index: 10;
+}
+
+.welcome-message.hidden {
+    display: none;
+}
+
+.welcome-content {
+    text-align: center;
+    max-width: 400px;
+    padding: 40px;
+}
+
+.welcome-icon {
+    margin-bottom: 24px;
+    color: var(--accent-primary);
+    opacity: 0.8;
+}
+
+.welcome-content h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+
+.welcome-content > p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin-bottom: 32px;
+    line-height: 1.5;
+}
+
+.welcome-tips {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+}
+
+.welcome-tips .tip {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+}
+
+.welcome-tips .tip-icon {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-primary);
+    color: white;
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.welcome-tips .tip span:last-child {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
 /* Timeline Area */
 .timeline-area {
     background: var(--bg-primary);
@@ -1958,6 +2035,49 @@ kbd {
     width: 48px;
     height: 48px;
     border-width: 4px;
+}
+
+/* App loading overlay - Full page loading screen */
+.app-loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg-primary);
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+.app-loading-overlay.fade-out {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.app-loading-overlay.hidden {
+    display: none;
+}
+
+.app-loading-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.app-loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.app-loading-text {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
 }
 
 /* Project list loading state */

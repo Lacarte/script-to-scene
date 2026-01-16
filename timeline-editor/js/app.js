@@ -58,7 +58,20 @@ class App {
         // Load projects
         await this.loadProjects();
 
+        // Hide the app loading overlay with fade effect
+        this.hideAppLoadingOverlay();
+
         console.log('App initialized');
+    }
+
+    hideAppLoadingOverlay() {
+        const overlay = document.getElementById('app-loading-overlay');
+        if (overlay) {
+            overlay.classList.add('fade-out');
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+            }, 300);
+        }
     }
 
     setupExportButton() {
@@ -158,6 +171,10 @@ class App {
 
     async selectProject(project) {
         State.selectProject(project);
+
+        // Hide welcome message when a project is selected
+        const welcomeMessage = document.getElementById('welcome-message');
+        if (welcomeMessage) welcomeMessage.classList.add('hidden');
 
         // Update visual selection in project list
         document.querySelectorAll('.project-item').forEach(item => {

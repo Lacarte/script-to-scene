@@ -12,6 +12,14 @@
 </head>
 
 <body>
+    <!-- App loading overlay - shown immediately, hidden when everything is ready -->
+    <div id="app-loading-overlay" class="app-loading-overlay">
+        <div class="app-loading-content">
+            <div class="app-loading-spinner"></div>
+            <div class="app-loading-text">Loading Script-to-Scene...</div>
+        </div>
+    </div>
+
     <header class="app-header">
         <div class="header-left">
             <button id="sidebar-toggle" class="sidebar-toggle" title="Toggle Projects">
@@ -128,6 +136,38 @@
             <div class="timeline-viewport">
                 <div id="timeline-container">
                     <!-- Timeline blocks will be injected here -->
+                </div>
+                <!-- Welcome message shown when no project is selected -->
+                <div id="welcome-message" class="welcome-message">
+                    <div class="welcome-content">
+                        <div class="welcome-icon">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <rect x="2" y="2" width="20" height="20" rx="2"/>
+                                <path d="M7 2v20"/>
+                                <path d="M2 7h5"/>
+                                <path d="M2 12h5"/>
+                                <path d="M2 17h5"/>
+                                <circle cx="14.5" cy="12" r="3"/>
+                                <path d="M17.5 12l2 2"/>
+                            </svg>
+                        </div>
+                        <h2>Welcome to Script-to-Scene</h2>
+                        <p>Select a project from the sidebar to start editing your timeline.</p>
+                        <div class="welcome-tips">
+                            <div class="tip">
+                                <span class="tip-icon">1</span>
+                                <span>Choose a project from the left panel</span>
+                            </div>
+                            <div class="tip">
+                                <span class="tip-icon">2</span>
+                                <span>Review and fix scene errors</span>
+                            </div>
+                            <div class="tip">
+                                <span class="tip-icon">3</span>
+                                <span>Click "Stage" to send to Video Editor</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="timeline-scroll-indicator-left">
