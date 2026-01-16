@@ -892,114 +892,63 @@ const elements = {
 };
 
 /**
- * Initialize the editor
+ * Initialize the editor with sequential loading
  */
-function init() {
+async function init() {
     console.log('Video Editor initializing...');
 
-    // Show initial loading state
-    showInitialLoading();
-
-    // Check for staged data
+    // Check for staged data FIRST before showing any loading UI
     const stagedData = sessionStorage.getItem('staged_timeline');
     if (!stagedData) {
-        hideInitialLoading();
+        // No data - show overlay immediately without any loading animations
         showNoDataOverlay();
         return;
     }
 
+    let data;
     try {
-        const data = JSON.parse(stagedData);
-
-        // Small delay to show loading transition
-        setTimeout(() => {
-            loadProject(data);
-            hideInitialLoading();
-        }, 300);
+        data = JSON.parse(stagedData);
     } catch (error) {
         console.error('Failed to parse staged data:', error);
-        hideInitialLoading();
         showNoDataOverlay();
         return;
     }
 
-    // Setup event listeners
-    setupEventListeners();
+    // Data exists - hide no-data overlay immediately (in case browser cached old HTML)
+    hideNoDataOverlay();
 
-    // Apply saved settings from localStorage
+    // Show single loading overlay that stays until everything is ready
+    showLoadingOverlay('Initializing editor...');
+
+    // Setup
+    setupEventListeners();
     applySavedSettings();
+
+    // Load project data
+    updateLoadingOverlay('Loading project data...');
+    loadProjectData(data);
+
+    // Load assets with progress
+    await loadProjectMediaWithProgress();
+
+    // Hide loading overlay and show editor
+    await hideLoadingOverlay();
+    showToast('Editor ready', 'success');
 
     console.log('Video Editor initialized');
 }
 
 /**
- * Apply saved settings from localStorage
+ * Sleep utility for sequential loading
  */
-function applySavedSettings() {
-    // Apply saved timeline height
-    const timelineHeight = EditorState.timelineHeight;
-    if (elements.editorLayout) {
-        elements.editorLayout.style.setProperty('--timeline-height', `${timelineHeight}px`);
-    }
-    updateClipSizes(timelineHeight);
-
-    // Apply saved zoom level
-    updateZoom();
-
-    // Apply saved loop state
-    if (EditorState.isLooping && elements.loopBtn) {
-        elements.loopBtn.classList.add('active');
-    }
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
- * Show initial loading screen
+ * Load project data without media (fast)
  */
-function showInitialLoading() {
-    let loader = document.getElementById('initial-loader');
-    if (!loader) {
-        loader = document.createElement('div');
-        loader.id = 'initial-loader';
-        loader.className = 'initial-loader active';
-        loader.innerHTML = `
-            <div class="initial-loader-content">
-                <div class="initial-loader-spinner"></div>
-                <div class="initial-loader-text">Loading Editor...</div>
-            </div>
-        `;
-        document.body.appendChild(loader);
-    }
-}
-
-/**
- * Hide initial loading screen
- */
-function hideInitialLoading() {
-    const loader = document.getElementById('initial-loader');
-    if (loader) {
-        loader.classList.remove('active');
-        setTimeout(() => loader.remove(), 300);
-    }
-}
-
-/**
- * Show the no data overlay
- */
-function showNoDataOverlay() {
-    elements.noDataOverlay?.classList.remove('hidden');
-}
-
-/**
- * Hide the no data overlay
- */
-function hideNoDataOverlay() {
-    elements.noDataOverlay?.classList.add('hidden');
-}
-
-/**
- * Load project data from staged JSON
- */
-function loadProject(data) {
+function loadProjectData(data) {
     EditorState.project = {
         id: data.project_id,
         name: data.project_name,
@@ -1031,57 +980,40 @@ function loadProject(data) {
                 updateTimeScrubber();
                 updatePlayhead();
 
-                // Scroll timeline to keep playhead at fixed position during playback
                 if (EditorState.isPlaying && elements.timelineTracks) {
                     scrollTimelineToTime(time);
                 }
             },
             onPlaybackEnd: () => {
                 if (EditorState.isLooping) {
-                    // Restart playback from beginning
                     EditorState.playbackPosition = 0;
-
-                    // Reset audio first (before preview, since audio is master clock)
                     if (EditorState.audioElement && EditorState.audio?.loaded) {
                         EditorState.audioElement.currentTime = 0;
                         EditorState.audioElement.play().catch(e => console.warn('Loop audio play failed:', e));
                     }
-
-                    // Reset and restart preview
                     if (EditorState.preview) {
                         EditorState.preview.seek(0);
                         EditorState.preview.play();
-                        // Re-establish audio as master clock
                         if (EditorState.audioElement && EditorState.audio?.loaded) {
                             EditorState.preview.setTimeSource(() => EditorState.audioElement.currentTime);
                         }
                     }
-
-                    // Reset timeline scroll
                     if (elements.timelineTracks) {
                         elements.timelineTracks.scrollLeft = 0;
                     }
-
                     updatePlayhead();
                     updateTimeScrubber();
                     return;
                 }
 
-                // Not looping - stop playback
                 EditorState.isPlaying = false;
-
-                // Stop audio
                 if (EditorState.audioElement) {
                     EditorState.audioElement.pause();
                     EditorState.audioElement.currentTime = 0;
                 }
-
-                // Clear time source
                 if (EditorState.preview) {
                     EditorState.preview.setTimeSource(null);
                 }
-
-                // Reset to start
                 EditorState.playbackPosition = 0;
                 if (elements.timelineTracks) {
                     elements.timelineTracks.scrollLeft = 0;
@@ -1092,16 +1024,11 @@ function loadProject(data) {
             }
         });
 
-        // Set project path for loading text backgrounds (wbg.png, bbg.png)
         EditorState.preview.setProjectPath(`working-assets/${EditorState.project.id}`);
-
         EditorState.preview.setScenes(EditorState.scenes);
-        // Initial render to show placeholder/scene
         EditorState.preview.render();
 
-        // Enable text dragging on preview canvas
         EditorState.preview.enableTextDrag((x, y, scene) => {
-            // Record edit for undo/redo (debounced to avoid spam)
             if (!EditorState._textDragDebounce) {
                 EditorState._textDragDebounce = setTimeout(() => {
                     recordEdit(`Move text position (Scene ${scene.id})`, scene.id, 'text_position', null, { x, y });
@@ -1112,64 +1039,50 @@ function loadProject(data) {
         });
     }
 
-    // Reset playback position to start
     EditorState.playbackPosition = 0;
 
     // Update UI
-    hideNoDataOverlay();
     updateProjectInfo();
     renderTimeline();
     renderTimeRuler();
     updateTimeScrubber();
-    updatePlayhead(); // Ensure playhead starts at position 0
+    updatePlayhead();
 
     // Load default audio
     loadDefaultAudio();
-
-    // Auto-load images from working-assets/{project_id}/
-    autoLoadProjectMedia();
-
-    showToast(`Loaded project: ${EditorState.project.name}`, 'success');
 }
 
 /**
- * Auto-load images from working-assets/{project_id}/
- * Looks for files named 1.jpg, 1.png, 2.jpg, 2.png, etc. for each scene
+ * Load project media with progress tracking
  */
-async function autoLoadProjectMedia() {
+async function loadProjectMediaWithProgress() {
     const projectId = EditorState.project?.id;
     if (!projectId) {
         console.warn('No project ID available for auto-loading media');
         return;
     }
 
-    // Show loading overlay
-    showMediaLoadingOverlay();
-
     const basePath = `working-assets/${projectId}/`;
     const imageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
     let loadedCount = 0;
     const totalScenes = EditorState.scenes.filter(s => s.type !== 'text').length;
 
-    // Try to load image for each scene (scenes are 1-indexed in naming)
-    // Skip text-type scenes - they don't need images
+    // Update loading overlay
+    updateLoadingOverlay(`Loading assets (0/${totalScenes})...`);
+
+    // Process each scene
     for (let i = 0; i < EditorState.scenes.length; i++) {
         const scene = EditorState.scenes[i];
-        const sceneNumber = i + 1; // Scene numbers start at 1
+        const sceneNumber = i + 1;
 
-        // Skip text scenes - they render text overlay instead of images
         if (scene.type === 'text') {
             console.log(`Skipping scene ${sceneNumber}: text type`);
             continue;
         }
 
-        // Update loading progress
-        updateMediaLoadingProgress(loadedCount, totalScenes, `Loading scene ${sceneNumber}...`);
+        updateLoadingOverlay(`Loading scene ${sceneNumber} (${loadedCount}/${totalScenes})...`);
 
-        // Build list of paths to try: numbered files first, then original filename
         const pathsToTry = [];
-
-        // Try numbered format first (1.jpg, 1.png, etc.)
         for (const ext of imageExtensions) {
             pathsToTry.push({
                 path: `${basePath}${sceneNumber}.${ext}`,
@@ -1177,13 +1090,11 @@ async function autoLoadProjectMedia() {
             });
         }
 
-        // Also try original filename from scene data if it exists
         if (scene.image) {
             pathsToTry.push({
                 path: `${basePath}${scene.image}`,
                 filename: scene.image
             });
-            // Try original filename without path prefix if it has one
             const bareFilename = scene.image.split('/').pop();
             if (bareFilename !== scene.image) {
                 pathsToTry.push({
@@ -1193,7 +1104,6 @@ async function autoLoadProjectMedia() {
             }
         }
 
-        // Try each path until one works
         let found = false;
         for (const { path: imagePath, filename } of pathsToTry) {
             try {
@@ -1204,110 +1114,130 @@ async function autoLoadProjectMedia() {
                     scene.image = filename;
                     loadedCount++;
                     found = true;
-                    console.log(`Loaded scene ${sceneNumber}: ${imagePath} (updated scene.image to: ${filename})`);
-
-                    // Update timeline with newly loaded image
+                    console.log(`Loaded scene ${sceneNumber}: ${imagePath}`);
                     updateSceneClipThumb(scene.id, imagePath);
-
-                    break; // Found image, stop trying other paths
+                    break;
                 }
             } catch (error) {
-                // File doesn't exist with this path, try next
                 continue;
             }
         }
+
         if (!found) {
-            console.warn(`Scene ${sceneNumber} (id: ${scene.id}): No image found. Original scene.image: ${scene.image}`);
+            console.warn(`Scene ${sceneNumber} (id: ${scene.id}): No image found`);
         }
+
+        // Small delay between each scene for visual feedback
+        await sleep(50);
     }
 
-    // Hide loading overlay
-    hideMediaLoadingOverlay();
+    // Update loading status
+    updateLoadingOverlay(`Loaded ${loadedCount}/${totalScenes} assets. Finalizing...`);
 
-    // Count scenes that actually have mediaUrl set
+    // Update preview with loaded scenes
     const scenesWithMedia = EditorState.scenes.filter(s => s.mediaUrl);
-    console.log(`Auto-load complete: ${loadedCount} reported, ${scenesWithMedia.length} scenes have mediaUrl`);
+    console.log(`Auto-load complete: ${scenesWithMedia.length} scenes have mediaUrl`);
 
-    // Always update preview with current scene state
     if (EditorState.preview) {
-        console.log('Calling setScenes on preview...');
         EditorState.preview.setScenes(EditorState.scenes);
         EditorState.preview.render();
     }
 
-    // Update UI if any images were loaded
     if (scenesWithMedia.length > 0) {
-        // Hide placeholder if we have media
         elements.previewPlaceholder?.classList.add('hidden');
-
-        // Update timeline to show thumbnails
         renderTimeline();
-
-        // Update media status
         if (elements.mediaStatus) {
             elements.mediaStatus.textContent = `${scenesWithMedia.length} images loaded`;
         }
-
-        showToast(`Auto-loaded ${scenesWithMedia.length} scene images`, 'success');
+        showToast(`Loaded ${scenesWithMedia.length} scene images`, 'success');
     } else {
         showToast(`No images found in working-assets/${projectId}/`, 'info');
     }
 }
 
 /**
- * Show media loading overlay
+ * Apply saved settings from localStorage
  */
-function showMediaLoadingOverlay() {
-    let overlay = document.getElementById('media-loading-overlay');
+function applySavedSettings() {
+    // Apply saved timeline height
+    const timelineHeight = EditorState.timelineHeight;
+    if (elements.editorLayout) {
+        elements.editorLayout.style.setProperty('--timeline-height', `${timelineHeight}px`);
+    }
+    updateClipSizes(timelineHeight);
+
+    // Apply saved zoom level
+    updateZoom();
+
+    // Apply saved loop state
+    if (EditorState.isLooping && elements.loopBtn) {
+        elements.loopBtn.classList.add('active');
+    }
+}
+
+// ===== SIMPLE LOADING OVERLAY =====
+
+/**
+ * Show unified loading overlay - single black screen with current step
+ */
+function showLoadingOverlay(message = 'Loading...') {
+    let overlay = document.getElementById('loading-overlay');
     if (!overlay) {
         overlay = document.createElement('div');
-        overlay.id = 'media-loading-overlay';
-        overlay.className = 'media-loading-overlay';
+        overlay.id = 'loading-overlay';
+        overlay.className = 'loading-overlay';
         overlay.innerHTML = `
-            <div class="media-loading-content">
-                <div class="media-loading-spinner"></div>
-                <div class="media-loading-text">Loading Images...</div>
-                <div class="media-loading-progress">
-                    <div class="media-loading-bar"></div>
-                </div>
-                <div class="media-loading-status">Preparing...</div>
+            <div class="loading-content">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">${message}</div>
             </div>
         `;
         document.body.appendChild(overlay);
     }
+    return overlay;
+}
 
-    requestAnimationFrame(() => {
-        overlay.classList.add('active');
+/**
+ * Update loading overlay text
+ */
+function updateLoadingOverlay(message) {
+    const textEl = document.querySelector('.loading-overlay .loading-text');
+    if (textEl) textEl.textContent = message;
+}
+
+/**
+ * Hide loading overlay with fade
+ */
+function hideLoadingOverlay() {
+    return new Promise(resolve => {
+        const overlay = document.getElementById('loading-overlay');
+        if (overlay) {
+            overlay.classList.add('fade-out');
+            setTimeout(() => {
+                overlay.remove();
+                resolve();
+            }, 300);
+        } else {
+            resolve();
+        }
     });
 }
 
 /**
- * Update media loading progress
+ * Show the no data overlay
  */
-function updateMediaLoadingProgress(loaded, total, message) {
-    const bar = document.querySelector('.media-loading-bar');
-    const status = document.querySelector('.media-loading-status');
-
-    if (bar && total > 0) {
-        const percent = Math.round((loaded / total) * 100);
-        bar.style.width = `${percent}%`;
-    }
-
-    if (status && message) {
-        status.textContent = message;
-    }
+function showNoDataOverlay() {
+    elements.noDataOverlay?.classList.remove('hidden');
 }
 
 /**
- * Hide media loading overlay
+ * Hide the no data overlay
  */
-function hideMediaLoadingOverlay() {
-    const overlay = document.getElementById('media-loading-overlay');
-    if (overlay) {
-        overlay.classList.remove('active');
-        setTimeout(() => overlay.remove(), 300);
-    }
+function hideNoDataOverlay() {
+    elements.noDataOverlay?.classList.add('hidden');
 }
+
+// Old loading functions removed - replaced by sequential loading system
 
 /**
  * Update a single scene clip thumbnail in the timeline

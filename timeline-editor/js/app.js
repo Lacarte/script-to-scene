@@ -14,6 +14,12 @@ class App {
     async init() {
         console.log('App initializing...');
 
+        // Remove any leftover staging overlay (e.g., when navigating back from editor)
+        const stagingOverlay = document.getElementById('staging-overlay');
+        if (stagingOverlay) {
+            stagingOverlay.remove();
+        }
+
         // Initialize components
         this.timeline = new Timeline('timeline-container');
         this.editor = new Editor('scene-editor', 'validation-panel');
