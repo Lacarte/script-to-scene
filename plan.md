@@ -257,10 +257,7 @@ multitrack video/image and audio
 text position and font on video VERY EFFEC
 
 
-
-
-
----
+in the future add a reviewwe in n8n a node the review the prompt to minimize errors--
 
 ## 🎯 PROJECT ANALYSIS & IMPROVEMENTS
 
